@@ -347,8 +347,8 @@ select.filter-sel{font-size:12px;padding:4px 10px;border:1px solid #ddd;border-r
 
 <!-- ═══ DASHBOARD TAB ═══ -->
 <div class="tab-content active" id="tab-dashboard">
-  <div id="status-banner" style="background:#f0faf6;border:1px solid #b9e8d5;border-radius:10px;padding:.65rem 1.25rem;margin-bottom:.75rem;font-size:12px;color:#0F6E56;display:flex;align-items:center;gap:8px">
-    <span>⟳</span> <span id="status-msg">Loading latest data…</span>
+  <div id="status-banner" style="background:#f0faf6;border:1px solid #b9e8d5;border-radius:10px;padding:.65rem 1.25rem;margin-bottom:.75rem;font-size:12px;color:#0F6E56">
+    <span id="status-msg">⟳ Loading latest data…</span>
   </div>
 
 
@@ -1316,59 +1316,60 @@ function renderTrendLines(snaps,oemFilter){
   });
 }
 
-/* ═══ VIEWER — loads data from Supabase on open ═══ */
-const SUPA_URL = 'https://pkyngucjjcdukfhhqysh.supabase.co';
-const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBreW5ndWNqamNkdWtmaGhxeXNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1Njg3NjEsImV4cCI6MjA5NDE0NDc2MX0.r-mYmlOJ6__obtUAGV-2Ad92tA7Vu4jzImwrtwEKxKk';
-
+/* ═══ VIEWER — reads from Supabase on open ═══ */
 async function loadSnaps() {
   try {
-    const res = await fetch(SUPA_URL + '/rest/v1/snapshots?select=report_date,filename,uploaded_by,uploaded_at,data&order=report_date.asc', {
-      headers: { 'apikey': SUPA_ANON, 'Authorization': 'Bearer ' + SUPA_ANON }
+    const res = await fetch('https://pkyngucjjcdukfhhqysh.supabase.co/rest/v1/snapshots?select=report_date,filename,uploaded_by,uploaded_at,data&order=report_date.asc', {
+      headers: {
+        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBreW5ndWNqamNkdWtmaGhxeXNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1Njg3NjEsImV4cCI6MjA5NDE0NDc2MX0.r-mYmlOJ6__obtUAGV-2Ad92tA7Vu4jzImwrtwEKxKk',
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBreW5ndWNqamNkdWtmaGhxeXNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1Njg3NjEsImV4cCI6MjA5NDE0NDc2MX0.r-mYmlOJ6__obtUAGV-2Ad92tA7Vu4jzImwrtwEKxKk'
+      }
     });
     const data = await res.json();
     if (Array.isArray(data)) {
       snapshots = data.map(s => s.data).filter(Boolean);
+      console.log('Viewer loaded', snapshots.length, 'snapshots');
     }
-  } catch(e) { snapshots = []; }
+  } catch(e) { console.error('Load error:', e); snapshots = []; }
 }
-function saveSnaps(){}
-function saveSnapshotToServer(){}
-function deleteSnap(){}
-function renderSnapsBar(){}
-function checkAuth(){ return Promise.resolve(); }
-function setViewerMode(){}
-function setAdminMode(){}
-function buildDCData(){}
+function saveSnaps() {}
+function saveSnapshotToServer() {}
+function deleteSnap() {}
+function renderSnapsBar() {}
+function checkAuth() { return Promise.resolve(); }
+function setViewerMode() {}
+function setAdminMode() {}
+function buildDCData() {}
 
-/* ═══ INIT — viewer only ═══ */
+
+/* ═══ INIT — viewer ═══ */
 (async function(){
   const statusMsg = document.getElementById('status-msg');
   await loadSnaps();
-  if(!snapshots.length){
-    if(statusMsg) statusMsg.textContent = 'No data available yet.';
+  if (!snapshots.length) {
+    if (statusMsg) statusMsg.textContent = 'No data available yet — check back after the next upload.';
     return;
   }
-  // Load latest snapshot
-  const latest = snapshots[snapshots.length-1];
-  if(latest && latest.accounts){
+  const latest = snapshots[snapshots.length - 1];
+  if (latest && latest.accounts && latest.accounts.length) {
     allData = latest.accounts;
-    trialData = allData.filter(r=>r.tr && r.trDays!==null && r.trDays>0);
-    document.getElementById('main-dashboard').style.display='block';
-    document.getElementById('trial-empty').style.display='none';
-    document.getElementById('trial-content').style.display='block';
-    document.getElementById('page-sub').textContent=`${allData.length.toLocaleString()} accounts · ${latest.date} · Ghana excluded`;
-    if(statusMsg) statusMsg.textContent=`✓ ${latest.date} — ${allData.length.toLocaleString()} accounts loaded · uploaded by ${latest.filename||'admin'}`;
-    const b=document.getElementById('snap-badge');
-    if(b){b.textContent=snapshots.length;b.style.display='';}
+    trialData = allData.filter(r => r.tr && r.trDays !== null && r.trDays > 0);
+    if (statusMsg) statusMsg.textContent = '✓ ' + latest.date + ' — ' + allData.length.toLocaleString() + ' accounts loaded';
+    document.getElementById('page-sub').textContent = allData.length.toLocaleString() + ' accounts · ' + latest.date + ' · Ghana excluded';
+    document.getElementById('main-dashboard').style.display = 'block';
+    document.getElementById('trial-empty').style.display = 'none';
+    document.getElementById('trial-content').style.display = 'block';
+    const b = document.getElementById('snap-badge');
+    if (b) { b.textContent = snapshots.length; b.style.display = ''; }
     populateTrendFilters();
     applyFilters();
     renderTrialTable();
-    buildInsights(allData,'all');
+    buildInsights(allData, 'all');
     renderTrends();
-    const tb=document.getElementById('trial-badge');
-    if(tb){tb.textContent=trialData.length;tb.style.display='';}
+    const tb = document.getElementById('trial-badge');
+    if (tb) { tb.textContent = trialData.length; tb.style.display = ''; }
   } else {
-    if(statusMsg) statusMsg.textContent='Data needs to be re-uploaded by admin.';
+    if (statusMsg) statusMsg.textContent = 'Data found but needs re-upload by admin with latest version.';
   }
 })();
 
