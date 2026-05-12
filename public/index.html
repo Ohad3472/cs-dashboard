@@ -375,9 +375,9 @@ select.filter-sel{font-size:12px;padding:4px 10px;border:1px solid #ddd;border-r
       <div style="font-size:11px;color:#aaa">shob_report_YYYYMMDD.xlsx · Ghana accounts excluded automatically</div>
       <input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFile(this.files[0])">
     </div>
-    <div id="dz-viewer-content">
-      <div style="font-size:13px;color:#aaa;margin-bottom:.35rem">Loading latest data…</div>
-      <div style="font-size:11px;color:#aaa"><span style="cursor:pointer;text-decoration:underline;color:#0F6E56" onclick="showLoginModal()">Admin login</span></div>
+    <div id="dz-viewer-content" style="text-align:center;padding:.75rem 0">
+      <div style="font-size:13px;color:#aaa;margin-bottom:.5rem" id="dz-status-msg">Loading…</div>
+      <div style="font-size:11px"><span style="cursor:pointer;text-decoration:underline;color:#0F6E56;font-weight:500" onclick="showLoginModal()">Admin login</span></div>
     </div>
   </div>
   <div id="snapshots-bar"></div>
@@ -1530,9 +1530,10 @@ function renderSnapsBar() {
   // Show viewer drop zone message once loaded
   const dzv = document.getElementById('dz-viewer-content');
   if(dzv && !isAdmin){
-    dzv.innerHTML = snapshots.length
-      ? `<div style="font-size:13px;font-weight:500;color:#0F6E56">✓ ${snapshots[snapshots.length-1].date} — ${(snapshots[snapshots.length-1].total||0).toLocaleString()} accounts loaded</div><div style="font-size:11px;color:#aaa;margin-top:4px">View-only mode · <span style="cursor:pointer;text-decoration:underline" onclick="showLoginModal()">Admin login</span></div>`
-      : `<div style="font-size:13px;color:#aaa">No data uploaded yet</div>`;
+    const statusMsg = document.getElementById('dz-status-msg');
+    if(statusMsg) statusMsg.textContent = snapshots.length
+      ? `✓ ${snapshots[snapshots.length-1].date} — ${(snapshots[snapshots.length-1].total||0).toLocaleString()} accounts loaded`
+      : 'No data uploaded yet';
   }
 })();
 
