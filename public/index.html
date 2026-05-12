@@ -1494,12 +1494,17 @@ function handleUploadClick() {
 
 function showLoginModal() {
   const m = document.getElementById('login-modal');
-  if (m) { m.style.display = 'flex'; setTimeout(() => document.getElementById('login-user')?.focus(), 100); }
+  if (m) {
+    m.style.setProperty('display', 'flex', 'important');
+    m.style.alignItems = 'center';
+    m.style.justifyContent = 'center';
+    setTimeout(() => document.getElementById('login-user')?.focus(), 100);
+  }
 }
 
 function closeLoginModal() {
   const m = document.getElementById('login-modal');
-  if (m) m.style.display = 'none';
+  if (m) m.style.setProperty('display', 'none', 'important');
   const e = document.getElementById('login-error');
   if (e) e.style.display = 'none';
   const p = document.getElementById('login-pass');
