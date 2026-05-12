@@ -377,7 +377,7 @@ select.filter-sel{font-size:12px;padding:4px 10px;border:1px solid #ddd;border-r
     </div>
     <div id="dz-viewer-content" style="text-align:center;padding:1rem 0">
       <div style="font-size:13px;color:#aaa;margin-bottom:.6rem" id="dz-status-msg">Loading…</div>
-      <button onclick="showLoginModal()" style="font-size:12px;padding:5px 18px;border:1px solid #5DCAA5;border-radius:7px;background:#fff;color:#0F6E56;cursor:pointer;font-weight:500">🔑 Admin login</button>
+      <button onclick="event.stopPropagation();showLoginModal()" style="font-size:12px;padding:5px 18px;border:1px solid #5DCAA5;border-radius:7px;background:#fff;color:#0F6E56;cursor:pointer;font-weight:500">🔑 Admin login</button>
     </div>
   </div>
   <div id="snapshots-bar"></div>
