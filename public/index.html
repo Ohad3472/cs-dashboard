@@ -1335,6 +1335,180 @@ function renderTrendLines(snaps,oemFilter){
   });
 }
 
+/* ═══ SUPABASE INTEGRATION ═══ */
+const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3000' : '';
+const STORAGE_KEY = 'cs_admin_token';
+
+let adminToken = null; try { adminToken = localStorage.getItem(STORAGE_KEY) || null; } catch(e) {}
+let adminUser = null; try { adminUser = localStorage.getItem(STORAGE_KEY + '_user') || null; } catch(e) {}
+let isAdmin    = false;
+
+// ── Auth helpers ──
+async function checkAuth() {
+  if (!adminToken) { setViewerMode(); return; }
+  try {
+    const r = await fetch(API_BASE + '/api/verify', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ token: adminToken })
+    });
+    const d = await r.json();
+    if (d.valid) { isAdmin = true; adminUser = d.username; setAdminMode(); }
+    else { adminToken = null; localStorage.removeItem(STORAGE_KEY); setViewerMode(); }
+  } catch(e) { setViewerMode(); }
+}
+
+function setAdminMode() {
+  isAdmin = true;
+  document.getElementById('admin-bar').style.display = 'flex';
+  document.getElementById('admin-username').textContent = adminUser;
+  document.getElementById('dz-admin-content').style.display = 'block';
+  document.getElementById('dz-viewer-content').style.display = 'none';
+  document.getElementById('drop-zone').style.cursor = 'pointer';
+  const btn = document.getElementById('upload-btn');
+  if (btn) btn.style.display = '';
+}
+
+function setViewerMode() {
+  isAdmin = false;
+  document.getElementById('admin-bar').style.display = 'none';
+  document.getElementById('dz-admin-content').style.display = 'none';
+  const btn = document.getElementById('upload-btn');
+  if (btn) btn.style.display = 'none';
+  // Remove drop zone click for viewers
+  const dz = document.getElementById('drop-zone');
+  if (dz) { dz.style.cursor = 'default'; dz.onclick = null; }
+}
+
+function handleUploadClick() {
+  if (!isAdmin) { showLoginModal(); return; }
+  document.getElementById('file-input').click();
+}
+
+// ── Login modal ──
+function showLoginModal() {
+  document.getElementById('login-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('login-user').focus(), 100);
+}
+function closeLoginModal() {
+  document.getElementById('login-modal').style.display = 'none';
+  document.getElementById('login-error').style.display = 'none';
+  document.getElementById('login-pass').value = '';
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeLoginModal();
+  if (e.key === 'Enter' && document.getElementById('login-modal').style.display === 'flex') submitLogin();
+});
+
+async function submitLogin() {
+  const username = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-error');
+  if (!username || !password) { errEl.textContent = 'Please enter username and password'; errEl.style.display = ''; return; }
+
+  try {
+    const r = await fetch(API_BASE + '/api/login', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ username, password })
+    });
+    const d = await r.json();
+    if (d.token) {
+      adminToken = d.token;
+      adminUser  = d.username;
+      localStorage.setItem(STORAGE_KEY, adminToken);
+      localStorage.setItem(STORAGE_KEY + '_user', adminUser);
+      closeLoginModal();
+      setAdminMode();
+    } else {
+      errEl.textContent = d.error || 'Login failed';
+      errEl.style.display = '';
+      document.getElementById('login-pass').value = '';
+    }
+  } catch(e) {
+    errEl.textContent = 'Connection error — please try again';
+    errEl.style.display = '';
+  }
+}
+
+function adminLogout() {
+  adminToken = null; adminUser = null; isAdmin = false;
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(STORAGE_KEY + '_user');
+  setViewerMode();
+}
+
+// ── Supabase snapshot storage (replaces localStorage) ──
+async function loadSnaps() {
+  try {
+    const r = await fetch(API_BASE + '/api/snapshots');
+    const d = await r.json();
+    if (d.snapshots) {
+      snapshots = d.snapshots.map(s => s.data);
+      snapshots.sort((a,b) => a.date.localeCompare(b.date));
+    }
+  } catch(e) {
+    // Fallback to localStorage if API not available (local dev)
+    try { snapshots = JSON.parse(localStorage.getItem('cs_dash_v7') || '[]'); } catch(e2) { snapshots = []; }
+  }
+}
+
+async function saveSnaps() {
+  // Saving is now done via upload API — this is a no-op
+}
+
+async function saveSnapshotToServer(snap) {
+  if (!adminToken) return;
+  try {
+    const r = await fetch(API_BASE + '/api/upload', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + adminToken
+      },
+      body: JSON.stringify({ snapshot: snap })
+    });
+    const d = await r.json();
+    if (!d.success) console.error('Upload failed:', d.error);
+  } catch(e) {
+    console.error('Upload error:', e);
+  }
+}
+
+async function deleteSnap(i) {
+  const snap = snapshots[i];
+  if (!snap) return;
+  if (!isAdmin) { alert('Only admins can delete snapshots'); return; }
+
+  try {
+    await fetch(API_BASE + '/api/delete', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + adminToken
+      },
+      body: JSON.stringify({ date: snap.date })
+    });
+  } catch(e) { console.error('Delete error:', e); }
+
+  snapshots.splice(i, 1);
+  renderSnapsBar();
+  renderTrends();
+  const b = document.getElementById('snap-badge');
+  if (snapshots.length) { b.textContent = snapshots.length; b.style.display = ''; }
+  else b.style.display = 'none';
+}
+
+// ── Override snap deletion chip to check admin ──
+function renderSnapsBar() {
+  const bar = document.getElementById('snapshots-bar');
+  if (!snapshots.length) { bar.innerHTML = ''; return; }
+  bar.innerHTML = '<span class="snap-label">Snapshots:</span>' +
+    snapshots.map((s,i) => `<span class="snap-chip ${i===snapshots.length-1?'current':''}">📅 ${s.date}${isAdmin?`<span class="snap-x" onclick="deleteSnap(${i})">×</span>`:''}</span>`).join('');
+}
+
+
+
 /* ═══ INIT ═══ */
 // Load data from Supabase on page load
 (async function(){
@@ -1662,178 +1836,6 @@ function buildInsights(data, oemFilter){
   }
 }
 
-
-/* ═══ SUPABASE INTEGRATION ═══ */
-const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3000' : '';
-const STORAGE_KEY = 'cs_admin_token';
-
-let adminToken = localStorage.getItem(STORAGE_KEY) || null;
-let adminUser  = localStorage.getItem(STORAGE_KEY + '_user') || null;
-let isAdmin    = false;
-
-// ── Auth helpers ──
-async function checkAuth() {
-  if (!adminToken) { setViewerMode(); return; }
-  try {
-    const r = await fetch(API_BASE + '/api/verify', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ token: adminToken })
-    });
-    const d = await r.json();
-    if (d.valid) { isAdmin = true; adminUser = d.username; setAdminMode(); }
-    else { adminToken = null; localStorage.removeItem(STORAGE_KEY); setViewerMode(); }
-  } catch(e) { setViewerMode(); }
-}
-
-function setAdminMode() {
-  isAdmin = true;
-  document.getElementById('admin-bar').style.display = 'flex';
-  document.getElementById('admin-username').textContent = adminUser;
-  document.getElementById('dz-admin-content').style.display = 'block';
-  document.getElementById('dz-viewer-content').style.display = 'none';
-  document.getElementById('drop-zone').style.cursor = 'pointer';
-  const btn = document.getElementById('upload-btn');
-  if (btn) btn.style.display = '';
-}
-
-function setViewerMode() {
-  isAdmin = false;
-  document.getElementById('admin-bar').style.display = 'none';
-  document.getElementById('dz-admin-content').style.display = 'none';
-  const btn = document.getElementById('upload-btn');
-  if (btn) btn.style.display = 'none';
-  // Remove drop zone click for viewers
-  const dz = document.getElementById('drop-zone');
-  if (dz) { dz.style.cursor = 'default'; dz.onclick = null; }
-}
-
-function handleUploadClick() {
-  if (!isAdmin) { showLoginModal(); return; }
-  document.getElementById('file-input').click();
-}
-
-// ── Login modal ──
-function showLoginModal() {
-  document.getElementById('login-modal').style.display = 'flex';
-  setTimeout(() => document.getElementById('login-user').focus(), 100);
-}
-function closeLoginModal() {
-  document.getElementById('login-modal').style.display = 'none';
-  document.getElementById('login-error').style.display = 'none';
-  document.getElementById('login-pass').value = '';
-}
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeLoginModal();
-  if (e.key === 'Enter' && document.getElementById('login-modal').style.display === 'flex') submitLogin();
-});
-
-async function submitLogin() {
-  const username = document.getElementById('login-user').value.trim();
-  const password = document.getElementById('login-pass').value;
-  const errEl = document.getElementById('login-error');
-  if (!username || !password) { errEl.textContent = 'Please enter username and password'; errEl.style.display = ''; return; }
-
-  try {
-    const r = await fetch(API_BASE + '/api/login', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ username, password })
-    });
-    const d = await r.json();
-    if (d.token) {
-      adminToken = d.token;
-      adminUser  = d.username;
-      localStorage.setItem(STORAGE_KEY, adminToken);
-      localStorage.setItem(STORAGE_KEY + '_user', adminUser);
-      closeLoginModal();
-      setAdminMode();
-    } else {
-      errEl.textContent = d.error || 'Login failed';
-      errEl.style.display = '';
-      document.getElementById('login-pass').value = '';
-    }
-  } catch(e) {
-    errEl.textContent = 'Connection error — please try again';
-    errEl.style.display = '';
-  }
-}
-
-function adminLogout() {
-  adminToken = null; adminUser = null; isAdmin = false;
-  localStorage.removeItem(STORAGE_KEY);
-  localStorage.removeItem(STORAGE_KEY + '_user');
-  setViewerMode();
-}
-
-// ── Supabase snapshot storage (replaces localStorage) ──
-async function loadSnaps() {
-  try {
-    const r = await fetch(API_BASE + '/api/snapshots');
-    const d = await r.json();
-    if (d.snapshots) {
-      snapshots = d.snapshots.map(s => s.data);
-      snapshots.sort((a,b) => a.date.localeCompare(b.date));
-    }
-  } catch(e) {
-    // Fallback to localStorage if API not available (local dev)
-    try { snapshots = JSON.parse(localStorage.getItem('cs_dash_v7') || '[]'); } catch(e2) { snapshots = []; }
-  }
-}
-
-async function saveSnaps() {
-  // Saving is now done via upload API — this is a no-op
-}
-
-async function saveSnapshotToServer(snap) {
-  if (!adminToken) return;
-  try {
-    const r = await fetch(API_BASE + '/api/upload', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + adminToken
-      },
-      body: JSON.stringify({ snapshot: snap })
-    });
-    const d = await r.json();
-    if (!d.success) console.error('Upload failed:', d.error);
-  } catch(e) {
-    console.error('Upload error:', e);
-  }
-}
-
-async function deleteSnap(i) {
-  const snap = snapshots[i];
-  if (!snap) return;
-  if (!isAdmin) { alert('Only admins can delete snapshots'); return; }
-
-  try {
-    await fetch(API_BASE + '/api/delete', {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + adminToken
-      },
-      body: JSON.stringify({ date: snap.date })
-    });
-  } catch(e) { console.error('Delete error:', e); }
-
-  snapshots.splice(i, 1);
-  renderSnapsBar();
-  renderTrends();
-  const b = document.getElementById('snap-badge');
-  if (snapshots.length) { b.textContent = snapshots.length; b.style.display = ''; }
-  else b.style.display = 'none';
-}
-
-// ── Override snap deletion chip to check admin ──
-function renderSnapsBar() {
-  const bar = document.getElementById('snapshots-bar');
-  if (!snapshots.length) { bar.innerHTML = ''; return; }
-  bar.innerHTML = '<span class="snap-label">Snapshots:</span>' +
-    snapshots.map((s,i) => `<span class="snap-chip ${i===snapshots.length-1?'current':''}">📅 ${s.date}${isAdmin?`<span class="snap-x" onclick="deleteSnap(${i})">×</span>`:''}</span>`).join('');
-}
 
 </script>
 </html>
