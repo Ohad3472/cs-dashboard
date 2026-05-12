@@ -375,8 +375,9 @@ select.filter-sel{font-size:12px;padding:4px 10px;border:1px solid #ddd;border-r
       <div style="font-size:11px;color:#aaa">shob_report_YYYYMMDD.xlsx · Ghana accounts excluded automatically</div>
       <input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFile(this.files[0])">
     </div>
-    <div id="dz-viewer-content" style="display:none">
-      <div style="font-size:13px;font-weight:500;color:#aaa">Loading latest data…</div>
+    <div id="dz-viewer-content">
+      <div style="font-size:13px;color:#aaa;margin-bottom:.35rem">Loading latest data…</div>
+      <div style="font-size:11px;color:#aaa"><span style="cursor:pointer;text-decoration:underline;color:#0F6E56" onclick="showLoginModal()">Admin login</span></div>
     </div>
   </div>
   <div id="snapshots-bar"></div>
@@ -1360,13 +1361,18 @@ async function checkAuth() {
 
 function setAdminMode() {
   isAdmin = true;
-  document.getElementById('admin-bar').style.display = 'flex';
-  document.getElementById('admin-username').textContent = adminUser;
-  document.getElementById('dz-admin-content').style.display = 'block';
-  document.getElementById('dz-viewer-content').style.display = 'none';
-  document.getElementById('drop-zone').style.cursor = 'pointer';
+  const adminBar = document.getElementById('admin-bar');
+  if(adminBar) { adminBar.style.display = 'flex'; }
+  const adminUsername = document.getElementById('admin-username');
+  if(adminUsername) adminUsername.textContent = adminUser;
+  const dzAdmin = document.getElementById('dz-admin-content');
+  if(dzAdmin) dzAdmin.style.display = 'block';
+  const dzViewer = document.getElementById('dz-viewer-content');
+  if(dzViewer) dzViewer.style.display = 'none';
+  const dz = document.getElementById('drop-zone');
+  if(dz) { dz.style.cursor = 'pointer'; dz.onclick = () => document.getElementById('file-input').click(); }
   const btn = document.getElementById('upload-btn');
-  if (btn) btn.style.display = '';
+  if(btn) btn.style.display = '';
 }
 
 function setViewerMode() {
