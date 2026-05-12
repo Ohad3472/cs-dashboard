@@ -375,9 +375,9 @@ select.filter-sel{font-size:12px;padding:4px 10px;border:1px solid #ddd;border-r
       <div style="font-size:11px;color:#aaa">shob_report_YYYYMMDD.xlsx · Ghana accounts excluded automatically</div>
       <input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFile(this.files[0])">
     </div>
-    <div id="dz-viewer-content" style="text-align:center;padding:.75rem 0">
-      <div style="font-size:13px;color:#aaa;margin-bottom:.5rem" id="dz-status-msg">Loading…</div>
-      <div style="font-size:11px"><span style="cursor:pointer;text-decoration:underline;color:#0F6E56;font-weight:500" onclick="showLoginModal()">Admin login</span></div>
+    <div id="dz-viewer-content" style="text-align:center;padding:1rem 0">
+      <div style="font-size:13px;color:#aaa;margin-bottom:.6rem" id="dz-status-msg">Loading…</div>
+      <button onclick="showLoginModal()" style="font-size:12px;padding:5px 18px;border:1px solid #5DCAA5;border-radius:7px;background:#fff;color:#0F6E56;cursor:pointer;font-weight:500">🔑 Admin login</button>
     </div>
   </div>
   <div id="snapshots-bar"></div>
@@ -1073,6 +1073,7 @@ function processData(raw,filename,dateStr){
 
   // save snapshot
   const snap={date:dateStr,filename,total:allData.length,counts:{...counts},
+    accounts:allData,
     oemCounts:Object.fromEntries(Object.entries(oemCount).sort((a,b)=>b[1]-a[1]).slice(0,10)),
     ghostOEM:Object.fromEntries(Object.entries(ghostOEM).sort((a,b)=>b[1]-a[1]).slice(0,8)),
     negOEM:Object.fromEntries(Object.entries(negOEM).sort((a,b)=>b[1]-a[1]).slice(0,8)),
@@ -1521,15 +1522,32 @@ function renderSnapsBar() {
   await checkAuth();
   await loadSnaps();
   renderSnapsBar();
+
   if(snapshots.length){
     const b=document.getElementById('snap-badge');
     b.textContent=snapshots.length;
     b.style.display='';
     populateTrendFilters();
+
+    // Load the latest snapshot data into the dashboard for all users (admin + viewer)
+    const latest = snapshots[snapshots.length-1];
+    if(latest && latest.accounts){
+      // If snapshot has full account data, use it
+      allData = latest.accounts;
+      trialData = allData.filter(r=>r.tr && r.trDays!==null && r.trDays>0);
+      document.getElementById('main-dashboard').style.display='block';
+      document.getElementById('trial-empty').style.display='none';
+      document.getElementById('trial-content').style.display='block';
+      applyFilters();
+      renderTrialTable();
+      buildInsights(allData,'all');
+      const tb=document.getElementById('trial-badge');
+      if(tb){tb.textContent=trialData.length;tb.style.display='';}
+    }
   }
-  // Show viewer drop zone message once loaded
-  const dzv = document.getElementById('dz-viewer-content');
-  if(dzv && !isAdmin){
+
+  // Update drop zone status message for viewers
+  if(!isAdmin){
     const statusMsg = document.getElementById('dz-status-msg');
     if(statusMsg) statusMsg.textContent = snapshots.length
       ? `✓ ${snapshots[snapshots.length-1].date} — ${(snapshots[snapshots.length-1].total||0).toLocaleString()} accounts loaded`
