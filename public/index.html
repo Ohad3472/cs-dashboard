@@ -1,0 +1,1839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Customer Success — Account Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/*
+=============================================================
+  CS ACCOUNT DASHBOARD — v7
+  2026-05-11
+
+  CONSTANTS (edit to change behaviour)
+  ─────────────────────────────────────
+  LOW_CMD_THRESHOLD = 2       cmd/device below this → low_cmd alert
+  DECLINE_DAYS      = 30      days silent → declining alert
+  EXPIRY_CAP_DAYS   = 1095    credits >3yr → no risk shown
+  SINGLE_DEV_DAYS   = 90      trial-ended window for single-dev alert
+  EXCLUDE_COUNTRY   = 'ghana' excluded from all counts + table
+
+  ALERT CATEGORIES  (row colour = flag dot colour = same thing)
+  ──────────────────────────────────────────────────────────
+  Red   → Churn Risk
+  Amber → Inactive
+  Blue  → Billing / Upsell
+  Grey  → Ops / Data Quality
+
+  TL SCORE  (per-account composite — separate concept)
+  ──────────────────────────────────────────────────────────
+  🟢 Low churn   🟡 Mid churn   🔴 High churn
+
+  PENDING FROM DATA TEAM
+  ──────────────────────
+  login_count_last_30_days, cmd_app_install, cmd_device_settings,
+  cmd_remote_support, cmd_power_management, cmd_advanced_messaging,
+  devices_yoy_change
+
+  DEAD ACCOUNT EXCLUSION — READY TO ACTIVATE NEXT WEEK
+  ──────────────────────────────────────────────────────
+  Definition : limited = TRUE AND last activity > 180 days ago
+  Status     : DOCUMENTED — not yet active
+  Blocker    : current shob export only populates last activity
+               for ~36 days. Will produce false exclusions until
+               last activity is populated for all 60k accounts.
+  Activation : when updated xlsx is available, find the commented
+               line in processData() and uncomment it:
+               // DEAD ACCOUNT RULE (activate next week):
+               // if(lim && daysSince !== null && daysSince > 180) continue;
+=============================================================
+*/
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;color:#1a1a1a;background:#f4f3ef;min-height:100vh}
+.page{max-width:1420px;margin:0 auto;padding:1.25rem 1.75rem 3rem}
+.page-title{font-size:20px;font-weight:500;color:#111;margin-bottom:2px}
+.page-sub{font-size:11px;color:#aaa;margin-bottom:.75rem}
+
+/* Tabs */
+.tabs{display:flex;border-bottom:1.5px solid #e0ddd7;margin-bottom:1rem}
+.tab{padding:.5rem 1.2rem;font-size:12px;font-weight:500;color:#999;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1.5px;transition:color .15s,border-color .15s;white-space:nowrap}
+.tab:hover{color:#555}
+.tab.active{color:#111;border-bottom-color:#111}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.tab-badge{display:inline-block;font-size:9px;font-weight:600;background:#EEEDFE;color:#534AB7;border-radius:100px;padding:1px 6px;margin-left:4px;vertical-align:middle}
+
+/* Drop zone */
+#drop-zone{border:2px dashed #d0cdc5;border-radius:12px;padding:1.5rem;text-align:center;background:#faf9f6;cursor:pointer;transition:border-color .2s,background .2s;margin-bottom:.75rem}
+#drop-zone.drag-over{border-color:#4a90d9;background:#edf4ff}
+#drop-zone.loaded{border-color:#5DCAA5;background:#f0faf6;padding:.9rem}
+.dz-loaded{font-size:12px;color:#0F6E56;font-weight:500}
+#file-input{display:none}
+
+/* Date modal */
+#date-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:1000;align-items:center;justify-content:center}
+#date-modal.visible{display:flex}
+.modal-box{background:#fff;border-radius:14px;padding:1.5rem;width:340px;box-shadow:0 8px 40px rgba(0,0,0,.18)}
+.modal-title{font-size:15px;font-weight:500;color:#111;margin-bottom:.3rem}
+.modal-sub{font-size:11px;color:#aaa;margin-bottom:.9rem}
+.modal-filename{font-size:12px;font-weight:500;color:#0F6E56;background:#f0faf6;border-radius:6px;padding:.4rem .6rem;margin-bottom:.9rem}
+.modal-label{font-size:11px;font-weight:500;color:#555;margin-bottom:.3rem;display:block}
+.modal-date{width:100%;font-size:13px;padding:.5rem .75rem;border:1px solid #ddd;border-radius:8px;outline:none;color:#111;margin-bottom:.9rem}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end}
+.modal-btn{font-size:12px;padding:6px 16px;border-radius:8px;cursor:pointer;font-weight:500;border:none}
+.modal-btn.cancel{background:#f2f1ed;color:#666}
+.modal-btn.confirm{background:#111;color:#fff}
+
+/* Snapshots bar */
+#snapshots-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:.6rem;align-items:center;min-height:22px}
+.snap-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;background:#fff;border:1px solid #e0ddd7;border-radius:100px;padding:2px 10px;color:#555}
+.snap-chip.current{border-color:#5DCAA5;color:#0F6E56;background:#f0faf6}
+.snap-x{cursor:pointer;color:#ccc;font-size:13px;margin-left:2px}
+.snap-x:hover{color:#c0392b}
+.snap-label{font-size:10px;color:#aaa;margin-right:2px}
+
+/* Alert rows */
+.alerts-block{display:flex;flex-direction:column;gap:5px;margin-bottom:8px}
+.alert-row{display:flex;align-items:stretch;gap:5px}
+.row-pill{display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;border-radius:6px;color:#fff;width:72px;flex-shrink:0;padding:4px 6px;text-align:center;line-height:1.35}
+.pill-churn{background:#A32D2D}
+.pill-inactive{background:#854F0B}
+.pill-billing{background:#185FA5}
+.pill-ops{background:#888780}
+.cards-row{display:flex;gap:5px;flex:1}
+.acard{flex:1;border-radius:8px;padding:.5rem .75rem;cursor:pointer;border:1.5px solid transparent;transition:filter .12s;min-width:0;position:relative}
+.acard:hover{filter:brightness(.96)}
+.acard.active{box-shadow:0 0 0 2px currentColor}
+.acard.placeholder{cursor:default;background:transparent!important;border:1.5px dashed #e5e2db!important;display:flex;align-items:center;justify-content:center}
+.c-r{background:#FCEBEB;color:#A32D2D;border-color:#F7C1C1}
+.c-a{background:#FAEEDA;color:#854F0B;border-color:#FAC775}
+.c-b{background:#E6F1FB;color:#185FA5;border-color:#B5D4F4}
+.c-g{background:#F1EFE8;color:#888780;border-color:#D3D1C7}
+.card-num{font-size:18px;font-weight:600;line-height:1.1;color:inherit}
+.card-label{font-size:11px;font-weight:500;color:#333;margin-top:2px;line-height:1.3}
+.card-sub{font-size:10px;color:#aaa;margin-top:1px}
+.new-badge{position:absolute;top:5px;right:6px;font-size:8px;font-weight:600;background:#EEEDFE;color:#3C3489;border-radius:100px;padding:1px 5px}
+
+/* Legend strip */
+.legend-strip{display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;padding:.45rem .9rem;background:#fff;border:0.5px solid #e5e2db;border-radius:8px;margin-bottom:8px;font-size:11px;color:#555}
+.leg-sep{width:1px;height:16px;background:#e5e2db;flex-shrink:0}
+.leg-item{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.leg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.leg-label{font-size:9px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#aaa;margin-right:.15rem}
+
+/* Insight panels */
+.insight-panel{display:none;margin-top:6px;border-radius:10px;overflow:hidden;border:1px solid #e5e2db}
+.insight-panel.visible{display:flex}
+.insight-main{flex:1;background:#fff;padding:.9rem 1.1rem}
+.insight-side{width:240px;flex-shrink:0;background:#f8f7f3;border-left:1px solid #e5e2db;padding:.85rem 1rem;font-size:11px;color:#666;line-height:1.6}
+.insight-header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:.6rem}
+.insight-title{font-size:13px;font-weight:500;color:#111}
+.insight-sub{font-size:11px;color:#aaa;margin-left:8px}
+.insight-close{font-size:18px;color:#ccc;cursor:pointer;margin-left:1rem}
+.insight-close:hover{color:#555}
+.bar-rows{display:flex;flex-direction:column;gap:3px}
+.bar-row{display:flex;align-items:center;gap:7px}
+.bar-name{font-size:11px;color:#666;width:95px;text-align:right;flex-shrink:0}
+.bar-track{flex:1;height:13px;background:#f2f1ed;border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;border-radius:3px;transition:width .5s ease}
+.fill-red{background:#e9a0a0}.fill-amber{background:#f5c878}.fill-blue{background:#85B7EB}.fill-green{background:#9FE1CB}.fill-grey{background:#ccc}
+.tbox{display:flex;align-items:flex-start;gap:6px;border-left:3px solid #1D9E75;border-radius:0 6px 6px 0;padding:.45rem .6rem;margin-top:.5rem;background:#f0faf6}
+.tbox.amber{background:#fffbf0;border-left-color:#EF9F27}
+.tbox.blue{background:#edf4ff;border-left-color:#185FA5}
+.tbox.red{background:#fdecea;border-left-color:#A32D2D}
+.th-text{font-size:11px;color:#1a1a1a;line-height:1.5}
+.th-count{font-size:11px;font-weight:500;margin-left:auto;white-space:nowrap;padding-left:8px;color:#0F6E56}
+.th-count.amber{color:#854F0B}.th-count.blue{color:#185FA5}
+.side-title{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#aaa;margin-bottom:.4rem}
+.side-stat{display:flex;justify-content:space-between;padding:3px 0;border-bottom:.5px solid #ece9e3;font-size:11px}
+.side-stat:last-child{border-bottom:none}
+.side-label{color:#888}.side-val{font-weight:500;color:#444}
+
+/* Tier strip */
+.sec-label{font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#bbb;margin-bottom:4px;margin-top:8px;display:block}
+.tier-strip{display:flex;gap:5px}
+.tier-card{flex:1;background:#fff;border:1.5px solid #e5e2db;border-radius:8px;padding:.4rem .7rem;cursor:pointer;transition:border-color .12s}
+.tier-card:hover{border-color:#bbb}
+.tier-card.active{border-color:#555;box-shadow:0 0 0 1.5px #555}
+.tier-num{font-size:16px;font-weight:500;color:#333}
+.tier-sub{font-size:10px;color:#aaa}
+
+/* Shared table styles */
+.tbl-header{display:flex;align-items:flex-start;justify-content:space-between;margin-top:1rem;margin-bottom:.4rem;gap:1rem}
+.tbl-title{font-size:15px;font-weight:500;color:#111}
+.tbl-count{font-size:11px;color:#999;margin-top:2px}
+.tbl-ctrl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input[type=text]{font-size:12px;padding:5px 11px;border:1px solid #ddd;border-radius:7px;background:#fff;color:#111;width:210px;outline:none}
+input[type=text]:focus{border-color:#999}
+.btn{font-size:12px;padding:5px 13px;border:1px solid #ddd;border-radius:7px;background:#fff;color:#333;cursor:pointer;white-space:nowrap}
+.btn:hover{background:#f0efe9}
+.btn.green{border-color:#5DCAA5;color:#0F6E56}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:.4rem;min-height:20px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;background:#fff;border:1px solid #ccc;border-radius:100px;padding:2px 10px}
+.fdot{display:inline-block;width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.chip-x{cursor:pointer;color:#bbb;margin-left:2px;font-size:13px}
+.chip-x:hover{color:#333}
+.fd-r{background:#c0392b}.fd-a{background:#c68a00}.fd-b{background:#1a5fa8}.fd-g{background:#aaa}
+.tbl-wrap{border:1px solid #e0ddd7;border-radius:10px;overflow:hidden;background:#fff;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:900px;table-layout:fixed}
+td{overflow:hidden;text-overflow:ellipsis}
+th:nth-child(1){width:130px}th:nth-child(2){width:90px}th:nth-child(3){width:62px}th:nth-child(4){width:76px}th:nth-child(5){width:140px}th:nth-child(6){width:74px}th:nth-child(7){width:54px}th:nth-child(8){width:40px}th:nth-child(9){width:58px}th:nth-child(10){width:66px}th:nth-child(11){width:56px}th:nth-child(12){width:76px}th:nth-child(13){width:50px}th:nth-child(14){width:62px}th:nth-child(15){width:52px}th:nth-child(16){width:30px}
+thead{background:#f8f7f3}
+th{font-size:11px;font-weight:500;color:#999;text-align:left;padding:7px 9px;border-bottom:1px solid #ece9e3;white-space:nowrap;cursor:pointer;user-select:none}
+th:hover{color:#333}
+.sarr{font-size:9px;margin-left:3px;opacity:.25}
+.sarr.on{opacity:1}
+td{padding:6px 9px;border-bottom:1px solid #f2efe9;white-space:nowrap;color:#111;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#faf9f6}
+.badge{display:inline-block;font-size:10px;padding:1px 7px;border-radius:100px;font-weight:500}
+.b-lim{background:#FAEEDA;color:#854F0B}
+.b-trial{background:#E6F1FB;color:#185FA5}
+.b-oem{background:#f2f1ed;color:#666;border:1px solid #e5e2db}
+.b-cp{background:#E6F1FB;color:#185FA5}
+.neg{color:#A32D2D;font-weight:500}
+.muted{color:#ccc}
+.flags{display:inline-flex;align-items:center;gap:2px;margin-right:3px;vertical-align:middle}
+.rfdot{display:inline-block;width:6px;height:6px;border-radius:50%;vertical-align:middle}
+.pagination{display:flex;align-items:center;gap:10px;margin-top:.75rem;font-size:12px;color:#aaa}
+.pbtn{padding:4px 12px;border:1px solid #ddd;border-radius:7px;background:#fff;cursor:pointer;font-size:12px;color:#333}
+.pbtn:disabled{opacity:.35;cursor:default}
+
+/* TL dot */
+.tl-g{display:inline-block;width:9px;height:9px;border-radius:50%;background:#1D9E75;vertical-align:middle}
+.tl-a{display:inline-block;width:9px;height:9px;border-radius:50%;background:#EF9F27;vertical-align:middle}
+.tl-r{display:inline-block;width:9px;height:9px;border-radius:50%;background:#E24B4A;vertical-align:middle}
+
+/* Trial Monitor tab */
+.trial-summary{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:1rem}
+.ts-card{background:#fff;border:1px solid #e5e2db;border-radius:8px;padding:.6rem .85rem}
+.dc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:.75rem}
+.dc-card{background:#fff;border:1px solid #e5e2db;border-radius:8px;padding:.55rem .85rem;cursor:pointer;transition:filter .12s;border-left:3px solid #e5e2db;position:relative}
+.dc-card:hover{filter:brightness(.97)}
+.dc-card.active{box-shadow:0 0 0 2px #555;border-left-color:inherit}
+.dc-card.priority-high{border-left-color:#E24B4A}
+.dc-card.priority-med{border-left-color:#EF9F27}
+.dc-card.priority-low{border-left-color:#B4B2A9}
+.dc-num{font-size:20px;font-weight:600;color:#111;line-height:1.1;margin-bottom:2px}
+.dc-label{font-size:11px;font-weight:500;color:#333;margin-bottom:1px}
+.dc-sub{font-size:10px;color:#aaa}
+.dc-priority{font-size:9px;font-weight:700;padding:1px 7px;border-radius:100px;position:absolute;top:8px;right:8px}
+.dc-high{background:#fdecea;color:#a02828}
+.dc-med{background:#FAEEDA;color:#633806}
+.dc-low{background:#f2f1ed;color:#666}
+.dc-section-label{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#bbb;margin:.75rem 0 .4rem;display:block}
+.dc-tbl-wrap{border:1px solid #e0ddd7;border-radius:10px;overflow:hidden;background:#fff;overflow-x:auto;margin-top:.75rem}
+.dc-empty{text-align:center;padding:2rem;color:#aaa;font-size:12px}
+.ts-clickable{cursor:pointer;transition:filter .12s}
+.ts-clickable:hover{filter:brightness(.96)}
+.ts-clickable.active{box-shadow:0 0 0 2px currentColor;border-color:currentColor}
+.ts-card.red{color:#A32D2D}.ts-card.amber{color:#854F0B}.ts-card.green{color:#085041}
+.ts-num{font-size:20px;font-weight:600;color:#111}
+.ts-label{font-size:10px;color:#aaa;margin-top:2px}
+.ts-card.red .ts-num{color:#A32D2D}
+.ts-card.amber .ts-num{color:#854F0B}
+.ts-card.green .ts-num{color:#085041}
+.trial-filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:.75rem}
+select.filter-sel{font-size:12px;padding:4px 10px;border:1px solid #ddd;border-radius:7px;background:#fff;color:#111;outline:none;cursor:pointer}
+
+/* Insights tab */
+
+/* Insight sections */
+.insights-top{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:1rem}
+.insight-section{background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem}
+.insight-section-title{font-size:13px;font-weight:500;color:#111;margin-bottom:.6rem;display:flex;align-items:baseline;gap:8px}
+.insight-note{font-size:10px;color:#aaa;font-style:italic;font-weight:400;margin-left:auto}
+.insight-section-full{background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem;margin-bottom:1rem}
+.insight-section-full .insight-section-title{font-size:13px;font-weight:500;color:#111;margin-bottom:.6rem;display:flex;align-items:baseline;gap:8px}
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:.75rem}
+.kpi-card{background:#fff;border:0.5px solid #e5e2db;border-radius:8px;padding:.6rem .85rem}
+.kpi-num{font-size:22px;font-weight:600;color:#111;line-height:1}
+.kpi-label{font-size:11px;color:#888;margin-top:3px}
+.kpi-sub{font-size:10px;color:#aaa;margin-top:1px}
+/* Funnel */
+.funnel-wrap{display:flex;flex-direction:column;gap:3px}
+.funnel-row{display:flex;align-items:center;gap:10px}
+.funnel-label{font-size:11px;font-weight:500;color:#111;width:155px;flex-shrink:0}
+.funnel-bar-wrap{flex:1;height:22px;background:#f2f1ed;border-radius:4px;overflow:hidden;position:relative}
+.funnel-bar{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:8px;font-size:10px;font-weight:500;color:#fff;transition:width .6s ease}
+.funnel-pct{font-size:11px;color:#888;width:45px;text-align:right;flex-shrink:0}
+.funnel-n{font-size:11px;color:#aaa;width:75px;text-align:right;flex-shrink:0}
+/* Size usage */
+.size-grid{display:flex;flex-direction:column;gap:3px}
+.size-row{display:flex;align-items:center;gap:8px;font-size:11px}
+.size-label{width:90px;flex-shrink:0;color:#555;font-weight:500}
+.size-bar-wrap{flex:1;height:16px;background:#f2f1ed;border-radius:3px;overflow:hidden}
+.size-bar{height:100%;border-radius:4px;background:#378ADD}
+.size-pct{width:38px;text-align:right;color:#888;flex-shrink:0}
+.size-cmd{width:100px;text-align:right;color:#aaa;flex-shrink:0;font-size:10px}
+/* Upsell */
+.upsell-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.upsell-card{background:#fff;border:0.5px solid #e5e2db;border-left:3px solid #185FA5;border-radius:0 8px 8px 0;padding:.6rem .85rem}
+.upsell-num{font-size:18px;font-weight:600;color:#185FA5}
+.upsell-label{font-size:11px;color:#333;margin-top:2px}
+.upsell-sub{font-size:10px;color:#aaa;margin-top:1px}
+/* Plan split */
+.plan-bars{display:flex;flex-direction:column;gap:4px}
+.plan-row{display:flex;align-items:center;gap:10px}
+.plan-label{font-size:11px;font-weight:500;color:#111;width:110px;flex-shrink:0}
+.plan-bar-wrap{flex:1;height:18px;background:#f2f1ed;border-radius:4px;overflow:hidden}
+.plan-bar{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:6px;font-size:9px;font-weight:500;color:#fff}
+.plan-n{font-size:11px;color:#888;width:80px;text-align:right;flex-shrink:0}
+
+.trends-filters{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:.75rem 1rem;background:#fff;border:1px solid #e5e2db;border-radius:10px;margin-bottom:1rem}
+.tf-label{font-size:11px;font-weight:500;color:#555;white-space:nowrap}
+.tf-sep{width:1px;height:20px;background:#e5e2db;flex-shrink:0}
+.mgmt-section{margin-bottom:1.5rem}
+.mgmt-title{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin-bottom:.6rem}
+.pie-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.pie-card{background:#fff;border:1px solid #e5e2db;border-radius:10px;padding:.75rem 1rem}
+.pie-card-title{font-size:11px;font-weight:500;color:#555;margin-bottom:.5rem}
+.pie-wrap{position:relative;height:160px;margin-bottom:.5rem}
+.pie-legend{display:flex;flex-direction:column;gap:2px}
+.pie-leg-row{display:flex;align-items:center;gap:5px;font-size:10px;color:#666}
+.pie-leg-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.cat-section{margin-bottom:1.5rem}
+.cat-label{font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#fff;border-radius:5px;padding:3px 10px;display:inline-block;margin-bottom:.6rem}
+.cat-churn{background:#A32D2D}.cat-inactive{background:#854F0B}.cat-billing{background:#185FA5}.cat-ops{background:#888780}
+.charts-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.chart-card{background:#fff;border:1px solid #e5e2db;border-radius:10px;padding:.7rem .9rem}
+.chart-title{font-size:10px;font-weight:500;color:#888;margin-bottom:.3rem}
+.chart-num{font-size:20px;font-weight:500;color:#111;line-height:1}
+.chart-delta{font-size:10px;margin:.2rem 0 .4rem}
+.delta-up{color:#c0392b}.delta-down{color:#1D9E75}.delta-flat{color:#aaa}
+.chart-wrap{height:80px;position:relative}
+.snap-log{margin-top:1.5rem}
+.snap-log-title{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin-bottom:.5rem}
+.snap-tbl{width:100%;border-collapse:collapse;font-size:11px}
+.snap-tbl th{font-size:10px;font-weight:500;color:#aaa;text-align:left;padding:5px 8px;border-bottom:1px solid #ece9e3;background:#f8f7f3}
+.snap-tbl td{padding:5px 8px;border-bottom:.5px solid #f2efe9;color:#555}
+.snap-tbl tr:last-child td{border-bottom:none}
+.snap-del{color:#ddd;cursor:pointer;font-size:14px}
+.snap-del:hover{color:#c0392b}
+.info-note{font-size:11px;color:#aaa;font-style:italic;padding:.5rem 0}
+</style>
+</head>
+<body>
+
+<!-- ADMIN LOGIN MODAL -->
+<div id="login-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:14px;padding:1.75rem;width:320px;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+    <div style="font-size:16px;font-weight:500;color:#111;margin-bottom:.25rem">Admin login</div>
+    <div style="font-size:11px;color:#aaa;margin-bottom:1.1rem">Upload access only — viewers don't need to log in</div>
+    <label style="font-size:11px;font-weight:500;color:#555;display:block;margin-bottom:.25rem">Username</label>
+    <input id="login-user" type="text" placeholder="e.g. ohad" style="width:100%;font-size:13px;padding:.5rem .75rem;border:1px solid #ddd;border-radius:8px;outline:none;margin-bottom:.6rem;color:#111">
+    <label style="font-size:11px;font-weight:500;color:#555;display:block;margin-bottom:.25rem">Password</label>
+    <input id="login-pass" type="password" placeholder="Password" style="width:100%;font-size:13px;padding:.5rem .75rem;border:1px solid #ddd;border-radius:8px;outline:none;margin-bottom:.75rem;color:#111">
+    <div id="login-error" style="font-size:11px;color:#c0392b;margin-bottom:.6rem;display:none"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="closeLoginModal()" style="font-size:12px;padding:6px 16px;border-radius:8px;border:1px solid #ddd;background:#f2f1ed;color:#666;cursor:pointer">Cancel</button>
+      <button onclick="submitLogin()" style="font-size:12px;padding:6px 16px;border-radius:8px;border:none;background:#111;color:#fff;cursor:pointer">Log in</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN STATUS BAR (shown when logged in) -->
+<div id="admin-bar" style="display:none;background:#f0faf6;border-bottom:1px solid #b9e8d5;padding:.4rem 1.75rem;font-size:11px;color:#0F6E56;display:none;align-items:center;gap:12px">
+  <span>🔑 Logged in as <strong id="admin-username"></strong></span>
+  <button onclick="adminLogout()" style="font-size:11px;padding:2px 10px;border:1px solid #5DCAA5;border-radius:100px;background:#fff;color:#0F6E56;cursor:pointer">Log out</button>
+</div>
+
+<div class="page">
+<h1 class="page-title">Customer Success — Account Dashboard</h1>
+<p class="page-sub" id="page-sub">Drop your weekly xlsx to load · Ghana accounts excluded automatically</p>
+
+<div id="date-modal">
+  <div class="modal-box">
+    <div class="modal-title">When is this report from?</div>
+    <div class="modal-sub">Confirm the date — used to track weekly trends.</div>
+    <div class="modal-filename" id="modal-filename"></div>
+    <label class="modal-label">Report date</label>
+    <input type="date" class="modal-date" id="modal-date">
+    <div class="modal-btns">
+      <button class="modal-btn cancel" onclick="cancelUpload()">Cancel</button>
+      <button class="modal-btn confirm" onclick="confirmUpload()">Load dashboard</button>
+    </div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('dashboard')">Dashboard</div>
+  <div class="tab" onclick="switchTab('trials')">Trial Monitor <span class="tab-badge" id="trial-badge" style="display:none"></span></div>
+  <div class="tab" onclick="switchTab('trends')" id="trends-tab">Insights <span class="tab-badge" id="snap-badge" style="display:none"></span></div>
+  <div class="tab" onclick="switchTab('cleansing')">Data cleansing</div>
+  <div class="tab" onclick="switchTab('guide')">Alert guide</div>
+</div>
+
+<!-- ═══ DASHBOARD TAB ═══ -->
+<div class="tab-content active" id="tab-dashboard">
+  <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+    <div id="dz-admin-content">
+      <div style="font-size:22px;margin-bottom:.3rem;color:#bbb">📂</div>
+      <div style="font-size:13px;font-weight:500;color:#555;margin-bottom:.15rem">Drop your Excel file here, or click to browse</div>
+      <div style="font-size:11px;color:#aaa">shob_report_YYYYMMDD.xlsx · Ghana accounts excluded automatically</div>
+      <input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFile(this.files[0])">
+    </div>
+    <div id="dz-viewer-content" style="display:none">
+      <div style="font-size:13px;font-weight:500;color:#aaa">Loading latest data…</div>
+    </div>
+  </div>
+  <div id="snapshots-bar"></div>
+
+  <div id="main-dashboard" style="display:none">
+    <!-- LEGEND -->
+    <div class="legend-strip">
+      <span class="leg-label">Row color &amp; flag dots:</span>
+      <div class="leg-item"><div class="leg-dot" style="background:#c0392b"></div>Churn risk</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#c68a00"></div>Inactive</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#1a5fa8"></div>Billing / upsell</div>
+      <div class="leg-sep"></div>
+      <span class="leg-label">TL score:</span>
+      <div class="leg-item"><div class="leg-dot" style="background:#1D9E75"></div>Low churn</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#EF9F27"></div>Mid churn</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#E24B4A"></div>High churn</div>
+    </div>
+
+    <div class="alerts-block">
+      <!-- CHURN RISK -->
+      <div class="alert-row">
+        <div class="row-pill pill-churn">Churn<br>risk</div>
+        <div class="cards-row">
+          <div class="acard c-r" data-filter="stale_large" data-panel="panel-stale">
+            <div class="card-num" id="n-stale">—</div><div class="card-label">Stale large accounts</div><div class="card-sub">51+ devices, gone silent</div>
+          </div>
+          <div class="acard c-r" data-filter="declining" data-panel="panel-declining">
+            <div class="card-num" id="n-declining">—</div><div class="card-label">Declining activity</div><div class="card-sub">Active account, silent 30+ days</div>
+          </div>
+          <div class="acard c-r" data-filter="never_enrolled" data-panel="panel-never-enrolled">
+            <div class="card-num" id="n-never-enrolled">—</div><div class="card-label">Never enrolled</div><div class="card-sub">0 devices · CS has contact</div>
+          </div>
+          <div class="acard c-r" data-filter="trial_expiring" data-panel="panel-trial-expiring">
+            <div class="card-num" id="n-trial-expiring">—</div><div class="card-label">Trial expiring · &lt;30 days</div><div class="card-sub">Act before trial ends</div>
+          </div>
+        </div>
+      </div>
+      <!-- INACTIVE -->
+      <div class="alert-row">
+        <div class="row-pill pill-inactive">Inactive</div>
+        <div class="cards-row">
+          <div class="acard c-a" data-filter="enrolled_never">
+            <div class="card-num" id="n-never">—</div><div class="card-label">Enrolled, never used</div><div class="card-sub">Devices added, 0 commands</div>
+          </div>
+          <div class="acard c-a" data-filter="low_cmd" data-panel="panel-lowcmd">
+            <div class="card-num" id="n-lowcmd">—</div><div class="card-label">Active but low commands</div><div class="card-sub">&lt; 2 commands per device</div>
+          </div>
+          <div class="acard c-a" data-filter="all_lowpriv" data-panel="panel-lowpriv">
+            <div class="card-num" id="n-lowpriv">—</div><div class="card-label">All devices low-priv</div><div class="card-sub">No system permissions granted</div>
+          </div>
+          <div class="acard c-a" data-filter="single_dev" data-panel="panel-single">
+            <div class="new-badge">REVISED</div>
+            <div class="card-num" id="n-single">—</div><div class="card-label">Single-device accounts</div><div class="card-sub">Trial ended, no progress &lt;90d</div>
+          </div>
+        </div>
+      </div>
+      <!-- BILLING -->
+      <div class="alert-row">
+        <div class="row-pill pill-billing">Billing<br>upsell</div>
+        <div class="cards-row">
+          <div class="acard c-b" data-filter="large_limited">
+            <div class="card-num" id="n-llim">—</div><div class="card-label">Large account on limited plan</div><div class="card-sub">51+ devices, plan is capped</div>
+          </div>
+          <div class="acard c-b" data-filter="neg_cred">
+            <div class="card-num" id="n-negcred">—</div><div class="card-label">Negative credits</div><div class="card-sub">Billing anomaly</div>
+          </div>
+          <div class="acard c-b" data-filter="expiry_90" data-panel="panel-expiry">
+            <div class="card-num" id="n-expiry90">—</div><div class="card-label">Credits expiring · 90 days</div><div class="card-sub">Renewal conversation needed</div>
+          </div>
+          <div class="acard c-b" data-filter="renewal_exp90">
+            <div class="new-badge">NEW</div>
+            <div class="card-num" id="n-renewal90">—</div><div class="card-label">Renewal — expire &lt;90 days</div><div class="card-sub">Smart licence expiring soon</div>
+          </div>
+        </div>
+      </div>
+      <!-- BILLING ROW 2 -->
+      <div class="alert-row">
+        <div class="row-pill pill-billing" style="visibility:hidden"></div>
+        <div class="cards-row">
+          <div class="acard c-b" data-filter="expiry_30">
+            <div class="card-num" id="n-expiry30">—</div><div class="card-label">Credits expiring · 30 days</div><div class="card-sub">Urgent — act now</div>
+          </div>
+          <div class="acard c-b" data-filter="renewal_expired">
+            <div class="new-badge">NEW</div>
+            <div class="card-num" id="n-renewal-exp">—</div><div class="card-label">Renewal — already expired</div><div class="card-sub">Smart licence lapsed</div>
+          </div>
+          <div class="acard placeholder"><div style="font-size:10px;color:#ccc;text-align:center">More signals<br>coming soon</div></div>
+          <div class="acard placeholder"><div style="font-size:10px;color:#ccc;text-align:center">More signals<br>coming soon</div></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- INSIGHT PANELS -->
+    <div class="insight-panel" id="panel-stale">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">Stale large accounts</span><span class="insight-sub">51+ devices · no activity on record</span></div><span class="insight-close" onclick="closePanel('panel-stale')">×</span></div><div style="font-size:11px;color:#555;line-height:1.6">Large deployments that have gone completely silent. Highest-value churn risk — call directly, do not email.</div></div>
+      <div class="insight-side"><div class="side-title">CS action</div><p>Call directly. Check if admin has changed, technical issue, or competitor move.</p></div>
+    </div>
+    <div class="insight-panel" id="panel-declining">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">Declining activity</span><span class="insight-sub" id="dec-sub"></span></div><span class="insight-close" onclick="closePanel('panel-declining')">×</span></div><div style="font-size:11px;color:#666;margin-bottom:.6rem">Days since last activity — accounts with proven past use now silent</div><div class="bar-rows" id="dec-bars"></div><div class="tbox amber" style="margin-top:.5rem"><div class="th-text"><strong>Threshold: 30+ days silent</strong> — past use proven, gone dark for a month.</div><div class="th-count amber" id="dec-count"></div></div></div>
+      <div class="insight-side"><div class="side-title">Note on login data</div><p>Uses last activity as proxy. Request <strong>login_count_last_30_days</strong> from data team for full accuracy.</p><div class="side-title" style="margin-top:.5rem">Breakdown</div><div class="side-stat"><span class="side-label">Active &lt;2 weeks</span><span class="side-val" id="dec-fresh">—</span></div><div class="side-stat"><span class="side-label">Active 2–4 weeks</span><span class="side-val" id="dec-mid">—</span></div><div class="side-stat"><span class="side-label">Silent 30+ days</span><span class="side-val" id="dec-old">—</span></div></div>
+    </div>
+    <div class="insight-panel" id="panel-never-enrolled">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">Never enrolled</span><span class="insight-sub" id="ne-sub"></span></div><span class="insight-close" onclick="closePanel('panel-never-enrolled')">×</span></div><div style="font-size:11px;color:#666;margin-bottom:.6rem">0 devices but CS has a contact signal — signed up, never set up.</div><div class="bar-rows" id="ne-bars"></div></div>
+      <div class="insight-side"><div class="side-title">Split logic</div><p style="margin-bottom:.5rem">Reachable = has email OR company OR activity date.</p><div class="side-stat"><span class="side-label">Never enrolled (reachable)</span><span class="side-val" id="ne-reach">—</span></div><div class="side-stat"><span class="side-label">Uncontactable (Ops row)</span><span class="side-val" id="ne-ghost">—</span></div></div>
+    </div>
+    <div class="insight-panel" id="panel-trial-expiring">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">Trial expiring soon</span><span class="insight-sub" id="te-sub"></span></div><span class="insight-close" onclick="closePanel('panel-trial-expiring')">×</span></div><div style="font-size:11px;color:#666;margin-bottom:.6rem">Active trials by days remaining</div><div class="bar-rows" id="te-bars"></div><div class="tbox red" style="margin-top:.5rem"><div class="th-text">Traffic light: &lt;30d = mid · &lt;15d = high · &lt;3d = critical</div></div></div>
+      <div class="insight-side"><div class="side-title">Urgency</div><div class="side-stat"><span class="side-label">Critical (&lt;3d)</span><span class="side-val" id="te-3">—</span></div><div class="side-stat"><span class="side-label">High (3–15d)</span><span class="side-val" id="te-15">—</span></div><div class="side-stat"><span class="side-label">Mid (15–30d)</span><span class="side-val" id="te-30">—</span></div><div class="side-stat"><span class="side-label">Total active trials</span><span class="side-val" id="te-total">—</span></div></div>
+    </div>
+    <div class="insight-panel" id="panel-lowcmd">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">Active but low commands</span><span class="insight-sub" id="lc-sub"></span></div><span class="insight-close" onclick="closePanel('panel-lowcmd')">×</span></div><div style="font-size:11px;color:#666;margin-bottom:.6rem">Commands per device — active accounts only</div><div class="bar-rows" id="lc-bars"></div><div class="tbox" style="margin-top:.5rem"><div class="th-text"><strong>&lt;2 cmd/device</strong> = bottom 50% of your active base.</div><div class="th-count" id="lc-count"></div></div></div>
+      <div class="insight-side"><div class="side-title">Active base</div><div class="side-stat"><span class="side-label">Active accounts</span><span class="side-val" id="lc-act">—</span></div><div class="side-stat"><span class="side-label">Median cmd/device</span><span class="side-val" id="lc-med">—</span></div><div class="side-stat"><span class="side-label">Below threshold</span><span class="side-val" id="lc-below">—</span></div></div>
+    </div>
+    <div class="insight-panel" id="panel-lowpriv">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">All devices low-priv</span><span class="insight-sub" id="lp-sub"></span></div><span class="insight-close" onclick="closePanel('panel-lowpriv')">×</span></div><div style="font-size:11px;color:#666;margin-bottom:.6rem">Every device lacks system permissions — product installed but unusable</div><div class="bar-rows" id="lp-bars"></div><div class="tbox amber" style="margin-top:.5rem"><div class="th-text"><strong>One CS call typically fixes this.</strong> Without permissions, app install, remote support and device settings are all blocked.</div><div class="th-count amber" id="lp-count"></div></div></div>
+      <div class="insight-side"><div class="side-title">Breakdown</div><div class="side-stat"><span class="side-label">All devices low-priv</span><span class="side-val" id="lp-all">—</span></div><div class="side-stat"><span class="side-label">Some devices low-priv</span><span class="side-val" id="lp-some">—</span></div><div class="side-stat"><span class="side-label">In trial + all low-priv</span><span class="side-val" id="lp-trial">—</span></div></div>
+    </div>
+    <div class="insight-panel" id="panel-single">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">Single-device accounts — revised</span><span class="insight-sub" id="sd-sub"></span></div><span class="insight-close" onclick="closePanel('panel-single')">×</span></div><div style="font-size:11px;color:#666;margin-bottom:.6rem">Trial ended within 90 days · only 1 device ever enrolled · no activity in 90+ days</div><div class="bar-rows" id="sd-bars"></div><div class="tbox amber" style="margin-top:.5rem"><div class="th-text"><strong>Definition:</strong> 1 device enrolled + trial ended 0–90 days ago + no activity for 90+ days. Beyond 90 days is excluded — not considered recoverable.</div></div></div>
+      <div class="insight-side"><div class="side-title">Why revised</div><p>Previously flagged all single-device accounts regardless of age. Now only shows accounts that stalled recently after trial — still actionable by CS.</p></div>
+    </div>
+    <div class="insight-panel" id="panel-expiry">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">Credits expiry</span><span class="insight-sub" id="exp-sub"></span></div><span class="insight-close" onclick="closePanel('panel-expiry')">×</span></div><div style="font-size:11px;color:#666;margin-bottom:.6rem">Days until credits run out</div><div class="bar-rows" id="exp-bars"></div><div class="tbox blue" style="margin-top:.5rem"><div class="th-text"><strong>Formula:</strong> where "days left" is empty → credits ÷ devices. Values &gt;3 years = no risk.</div></div></div>
+      <div class="insight-side"><div class="side-title">Breakdown</div><div class="side-stat"><span class="side-label">Expiring &lt;30d</span><span class="side-val" id="exp-30">—</span></div><div class="side-stat"><span class="side-label">30–60 days</span><span class="side-val" id="exp-60">—</span></div><div class="side-stat"><span class="side-label">60–90 days</span><span class="side-val" id="exp-90">—</span></div></div>
+    </div>
+    <div class="insight-panel" id="panel-ghost">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">Uncontactable ghost — OEM breakdown</span><span class="insight-sub" id="gh-sub"></span></div><span class="insight-close" onclick="closePanel('panel-ghost')">×</span></div><div style="font-size:11px;color:#666;margin-bottom:.6rem">0 devices · no email · no company · no activity</div><div class="bar-rows" id="gh-bars"></div></div>
+      <div class="insight-side"><div class="side-title">Why Ops row</div><p>No contact info — CS has nothing to call. Likely system-generated or OEM shells. 71% are OEM "undefined".</p><div class="side-stat"><span class="side-label">Total accounts</span><span class="side-val" id="gh-total">—</span></div><div class="side-stat"><span class="side-label">Uncontactable share</span><span class="side-val" id="gh-pct">—</span></div></div>
+    </div>
+
+    <!-- TIER -->
+    <span class="sec-label">Device Tier Distribution</span>
+    <div class="tier-strip">
+      <div class="tier-card" data-filter="tier_0"><div class="tier-num" id="n-t0">—</div><div class="tier-sub">≤ 1 device</div></div>
+      <div class="tier-card" data-filter="tier_1"><div class="tier-num" id="n-t1">—</div><div class="tier-sub">2 – 10</div></div>
+      <div class="tier-card" data-filter="tier_2"><div class="tier-num" id="n-t2">—</div><div class="tier-sub">11 – 50</div></div>
+      <div class="tier-card" data-filter="tier_3"><div class="tier-num" id="n-t3">—</div><div class="tier-sub">51 – 100</div></div>
+      <div class="tier-card" data-filter="tier_4"><div class="tier-num" id="n-t4">—</div><div class="tier-sub">&gt; 100</div></div>
+    </div>
+
+    <!-- MAIN TABLE -->
+    <div class="tbl-header">
+      <div><div class="tbl-title" id="tbl-title">All accounts</div><div class="tbl-count" id="tbl-count"></div></div>
+      <div class="tbl-ctrl">
+        <input type="text" id="search" placeholder="Search domain, company, country…" oninput="applyFilters()">
+        <button class="btn" onclick="clearAll()">Show all</button>
+        <button class="btn green" id="upload-btn" onclick="handleUploadClick()">↑ Load new xlsx</button>
+      </div>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th onclick="sortBy('d')">Domain <span class="sarr" id="s-d">↕</span></th>
+          <th onclick="sortBy('co')">Company <span class="sarr" id="s-co">↕</span></th>
+          <th onclick="sortBy('ct')">Country <span class="sarr" id="s-ct">↕</span></th>
+          <th onclick="sortBy('created')">Created <span class="sarr" id="s-created">↕</span></th>
+          <th onclick="sortBy('email')">Email <span class="sarr" id="s-email">↕</span></th>
+          <th onclick="sortBy('oem')">OEM <span class="sarr" id="s-oem">↕</span></th>
+          <th onclick="sortBy('dev')">Devices <span class="sarr" id="s-dev">↕</span></th>
+          <th>Trial</th>
+          <th onclick="sortBy('trDays')">Trial days <span class="sarr" id="s-trDays">↕</span></th>
+          <th onclick="sortBy('cr')">Credits <span class="sarr" id="s-cr">↕</span></th>
+          <th onclick="sortBy('daysLeft')">Days left <span class="sarr" id="s-daysLeft">↕</span></th>
+          <th onclick="sortBy('la')">Last activity <span class="sarr" id="s-la">↕</span></th>
+          <th>Limited</th>
+          <th onclick="sortBy('cmd')">Commands <span class="sarr" id="s-cmd">↕</span></th>
+          <th onclick="sortBy('cpd')">Cmd/dev <span class="sarr" id="s-cpd">↕</span></th>
+          <th>TL</th>
+        </tr></thead>
+        <tbody id="tbl-body"></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button class="pbtn" id="prev-btn" onclick="changePage(-1)">← Prev</button>
+      <span id="page-info"></span>
+      <button class="pbtn" id="next-btn" onclick="changePage(1)">Next →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TRIAL MONITOR TAB ═══ -->
+<div class="tab-content" id="tab-trials">
+  <div id="trial-empty" style="text-align:center;padding:3rem;color:#aaa">
+    <div style="font-size:32px;margin-bottom:.75rem">🔬</div>
+    <div style="font-size:14px;font-weight:500;color:#888;margin-bottom:.35rem">Trial Monitor</div>
+    <div style="font-size:12px">Load your weekly xlsx to see all active trials with traffic light scoring</div>
+  </div>
+  <div id="trial-content" style="display:none">
+    <!-- Summary cards -->
+    <div class="trial-summary">
+      <div class="ts-card red ts-clickable" id="tmc-red" onclick="filterTrialByCard('red')"><div class="ts-num" id="tm-red">—</div><div class="ts-label">High churn risk</div></div>
+      <div class="ts-card amber ts-clickable" id="tmc-amber" onclick="filterTrialByCard('amber')"><div class="ts-num" id="tm-amber">—</div><div class="ts-label">Mid churn risk</div></div>
+      <div class="ts-card green ts-clickable" id="tmc-green" onclick="filterTrialByCard('green')"><div class="ts-num" id="tm-green">—</div><div class="ts-label">Low churn risk</div></div>
+      <div class="ts-card ts-clickable" id="tmc-all" onclick="filterTrialByCard('all')"><div class="ts-num" id="tm-total">—</div><div class="ts-label">All trials</div></div>
+      <div class="ts-card ts-clickable" id="tmc-nodev" onclick="filterTrialByCard('nodev')"><div class="ts-num" id="tm-nodev">—</div><div class="ts-label">0 devices enrolled</div></div>
+    </div>
+    <!-- Filters -->
+    <div class="trial-filters">
+      <span style="font-size:11px;font-weight:500;color:#555">Filter:</span>
+      <select class="filter-sel" id="tm-tl-filter" onchange="renderTrialTable()">
+        <option value="all">All TL scores</option>
+        <option value="red">🔴 High churn only</option>
+        <option value="amber">🟡 Mid churn only</option>
+        <option value="green">🟢 Low churn only</option>
+      </select>
+      <select class="filter-sel" id="tm-oem-filter" onchange="renderTrialTable()">
+        <option value="all">All OEMs</option>
+      </select>
+      <input type="text" id="tm-search" placeholder="Search domain, company…" oninput="renderTrialTable()" style="width:180px">
+      <button class="btn" onclick="resetTrialFilters()">Reset</button>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th onclick="sortTrial('tl_order')">TL <span class="sarr" id="ts-tl">↕</span></th>
+          <th onclick="sortTrial('d')">Domain <span class="sarr" id="ts-d">↕</span></th>
+          <th onclick="sortTrial('co')">Company <span class="sarr" id="ts-co">↕</span></th>
+          <th onclick="sortTrial('email')">Email <span class="sarr" id="ts-email">↕</span></th>
+          <th onclick="sortTrial('oem')">OEM <span class="sarr" id="ts-oem">↕</span></th>
+          <th onclick="sortTrial('daysIntoTrial')">Days into trial <span class="sarr" id="ts-dit">↕</span></th>
+          <th onclick="sortTrial('trDays')">Days left <span class="sarr" id="ts-trd">↕</span></th>
+          <th onclick="sortTrial('dev')">Devices <span class="sarr" id="ts-dev">↕</span></th>
+          <th onclick="sortTrial('cmd')">Commands <span class="sarr" id="ts-cmd">↕</span></th>
+          <th onclick="sortTrial('lowP')">Low-priv dev <span class="sarr" id="ts-lp">↕</span></th>
+          <th onclick="sortTrial('la')">Last activity <span class="sarr" id="ts-la">↕</span></th>
+          <th onclick="sortTrial('ct')">Country <span class="sarr" id="ts-ct">↕</span></th>
+        </tr></thead>
+        <tbody id="trial-body"></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button class="pbtn" id="tm-prev" onclick="changeTrialPage(-1)">← Prev</button>
+      <span id="tm-page-info"></span>
+      <button class="pbtn" id="tm-next" onclick="changeTrialPage(1)">Next →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TRENDS TAB ═══ -->
+<div class="tab-content" id="tab-trends">
+  <div class="trends-filters">
+    <span class="tf-label">Filter by OEM:</span>
+    <select id="oem-filter" onchange="renderTrends()"><option value="all">All OEMs</option></select>
+    <div class="tf-sep"></div>
+    <span class="tf-label">Date range:</span>
+    <select id="date-from" onchange="renderTrends()"><option value="">From — all</option></select>
+    <span style="font-size:12px;color:#aaa">to</span>
+    <select id="date-to" onchange="renderTrends()"><option value="">To — all</option></select>
+    <div class="tf-sep"></div>
+    <button class="btn" onclick="clearTrendFilters()">Reset</button>
+    <button class="btn" onclick="clearAllSnaps()" style="margin-left:auto;color:#c0392b;border-color:#f5c5c5">Clear all snapshots</button>
+  </div>
+
+  <!-- INSIGHT SECTIONS -->
+  <div id="insights-empty" class="info-note" style="margin-bottom:1rem">Load your xlsx to see insights</div>
+  <div id="insights-content" style="display:none">
+
+    <!-- TOP ROW: 3 columns side by side -->
+    <div class="insights-top">
+
+      <!-- ACTIVATION FUNNEL -->
+      <div class="insight-section">
+        <div class="insight-section-title">Activation funnel <span class="insight-note">% of total</span></div>
+        <div class="funnel-wrap" id="ins-funnel"></div>
+      </div>
+
+      <!-- PLAN TYPE SPLIT -->
+      <div class="insight-section">
+        <div class="insight-section-title">Plan type split <span class="insight-note">active accounts only</span></div>
+        <!-- PENDING: once full last_activity data is available, replace active_base filter
+             from (dev>0 AND cmd>0) to (last_activity within last 180 days).
+             Search for "PLAN SPLIT PENDING" in buildInsights() -->
+        <div class="plan-bars" id="ins-plan"></div>
+      </div>
+
+      <!-- USAGE BY ACCOUNT SIZE -->
+      <div class="insight-section">
+        <div class="insight-section-title">Usage by account size <span class="insight-note">% with commands</span></div>
+        <div class="size-grid" id="ins-size"></div>
+      </div>
+
+    </div>
+
+    <!-- FULL WIDTH: UPSELL TARGETS -->
+    <div class="insight-section-full">
+      <div class="insight-section-title">Limited plan but active — upsell targets <span class="insight-note">by size · filtered by OEM selector above</span></div>
+      <div class="upsell-grid" id="ins-upsell"></div>
+      <div style="font-size:10px;color:#aaa;margin-top:.5rem">On a limited plan but genuinely using the product — warmest upsell leads for CS and account management.</div>
+    </div>
+
+  </div>
+
+  <div class="mgmt-section">
+    <div class="mgmt-title">Management view — from first upload · filtered by OEM selector above</div>
+    <div class="pie-grid" id="pie-grid"><div class="info-note">Load your first xlsx to see charts</div></div>
+  </div>
+  <div id="trend-charts-block"><div class="info-note">Load 2 or more weekly files to see trend lines</div></div>
+  <div class="snap-log">
+    <div class="snap-log-title">Loaded snapshots</div>
+    <div class="tbl-wrap"><table class="snap-tbl">
+      <thead><tr><th>Date</th><th>Filename</th><th>Accounts</th><th>Stale large</th><th>Declining</th><th>Renewals expired</th><th>Expiring 30d</th><th></th></tr></thead>
+      <tbody id="snap-tbl-body"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- DATA CLEANSING TAB -->
+<div class="tab-content" id="tab-cleansing">
+  <div id="dc-empty" class="dc-empty">Load your weekly xlsx to see data quality metrics</div>
+  <div id="dc-content" style="display:none">
+    <p style="font-size:11px;color:#aaa;margin-bottom:.75rem">Data quality issues and unreachable accounts — for ops and data team attention, not CS. Click any card to filter the account list below.</p>
+    <span class="dc-section-label">Unreachable accounts</span>
+    <div class="dc-grid" id="dc-cards-ops"></div>
+    <span class="dc-section-label">Data quality issues</span>
+    <div class="dc-grid" id="dc-cards-quality"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:.75rem;margin-bottom:.4rem">
+      <div>
+        <div style="font-size:14px;font-weight:500;color:#111" id="dc-tbl-title">All data issues</div>
+        <div style="font-size:11px;color:#999;margin-top:2px" id="dc-tbl-count"></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="dc-search" placeholder="Search domain, company…" oninput="applyDCFilters()" style="width:200px">
+        <button class="btn" onclick="clearDCFilter()">Show all</button>
+      </div>
+    </div>
+    <div class="dc-tbl-wrap">
+      <table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px">
+        <colgroup>
+          <col style="width:100px">
+          <col style="width:100px">
+          <col style="width:140px">
+          <col style="width:75px">
+          <col style="width:55px">
+          <col style="width:65px">
+          <col style="width:60px">
+          <col style="width:80px">
+          <col style="width:360px">
+        </colgroup>
+        <thead><tr>
+          <th onclick="sortDC('d')">Domain <span class="sarr" id="dc-s-d">↕</span></th>
+          <th onclick="sortDC('co')">Company <span class="sarr" id="dc-s-co">↕</span></th>
+          <th onclick="sortDC('email')">Email <span class="sarr" id="dc-s-email">↕</span></th>
+          <th onclick="sortDC('oem')">OEM <span class="sarr" id="dc-s-oem">↕</span></th>
+          <th onclick="sortDC('dev')">Devices <span class="sarr" id="dc-s-dev">↕</span></th>
+          <th onclick="sortDC('cmd')">Commands <span class="sarr" id="dc-s-cmd">↕</span></th>
+          <th onclick="sortDC('ct')">Country <span class="sarr" id="dc-s-ct">↕</span></th>
+          <th onclick="sortDC('la')">Last activity <span class="sarr" id="dc-s-la">↕</span></th>
+          <th>Issues</th>
+        </tr></thead>
+        <tbody id="dc-body"></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button class="pbtn" id="dc-prev" onclick="changeDCPage(-1)">← Prev</button>
+      <span id="dc-page-info"></span>
+      <button class="pbtn" id="dc-next" onclick="changeDCPage(1)">Next →</button>
+    </div>
+  </div>
+</div>
+
+<div class="tab-content" id="tab-guide">
+<div style="padding:.25rem 0 .25rem 1.5rem">
+
+  <div style="font-size:12px;color:#888;margin-bottom:1.25rem;line-height:1.6;background:#fff;border:0.5px solid #e5e2db;border-radius:8px;padding:.65rem 1rem">
+    Each alert below shows its exact conditions and current threshold. These can be adjusted — contact the dashboard owner to change a threshold.
+  </div>
+
+  <!-- CHURN RISK -->
+  <div style="font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#fff;background:#A32D2D;border-radius:5px;padding:3px 10px;display:inline-block;margin-bottom:.6rem">Churn risk</div>
+  <div id="guide-churn" style="display:flex;flex-direction:column;gap:5px;margin-bottom:1.1rem"></div>
+
+  <div style="font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#fff;background:#854F0B;border-radius:5px;padding:3px 10px;display:inline-block;margin-bottom:.6rem">Inactive</div>
+  <div id="guide-inactive" style="display:flex;flex-direction:column;gap:5px;margin-bottom:1.1rem"></div>
+
+  <div style="font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#fff;background:#185FA5;border-radius:5px;padding:3px 10px;display:inline-block;margin-bottom:.6rem">Billing / upsell</div>
+  <div id="guide-billing" style="display:flex;flex-direction:column;gap:5px;margin-bottom:1.1rem"></div>
+
+  <div style="font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#fff;background:#888780;border-radius:5px;padding:3px 10px;display:inline-block;margin-bottom:.6rem">Ops / data quality</div>
+  <div id="guide-ops" style="display:flex;flex-direction:column;gap:5px;margin-bottom:1.1rem"></div>
+
+  <div style="font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#fff;background:#111;border-radius:5px;padding:3px 10px;display:inline-block;margin-bottom:.6rem">Global exclusions</div>
+  <div id="guide-exclusions" style="display:flex;flex-direction:column;gap:5px;margin-bottom:1.1rem"></div>
+
+  <div style="font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#fff;background:#7F77DD;border-radius:5px;padding:3px 10px;display:inline-block;margin-bottom:.6rem">Pending — activate next week</div>
+  <div id="guide-pending" style="display:flex;flex-direction:column;gap:5px;margin-bottom:1.1rem"></div>
+
+</div>
+</div>
+
+</div><!-- /page -->
+
+<script>
+/* ═══ CONSTANTS ═══ */
+const PAGE=50, TRIAL_PAGE=50;
+const LOW_CMD=2, DECLINE_DAYS=30, EXPIRY_CAP=1095, SINGLE_DEV_DAYS=90;
+const EXCLUDE_COUNTRY='ghana';
+const TODAY=new Date('2026-05-10');
+const LS_KEY='cs_dash_v7';
+
+/* ═══ ALERT DEFINITIONS ═══ */
+const ALERTS=[
+  {key:'stale_large',    label:'Stale large accounts',          cat:'churn'},
+  {key:'declining',      label:'Declining activity',            cat:'churn'},
+  {key:'never_enrolled', label:'Never enrolled',                cat:'churn'},
+  {key:'trial_expiring', label:'Trial expiring <30d',           cat:'churn'},
+  {key:'enrolled_never', label:'Enrolled, never used',          cat:'inactive'},
+  {key:'low_cmd',        label:'Active but low commands',       cat:'inactive'},
+  {key:'all_lowpriv',    label:'All devices low-priv',          cat:'inactive'},
+  {key:'single_dev',     label:'Single-device accounts',        cat:'inactive'},
+  {key:'large_limited',  label:'Large account on limited plan', cat:'billing'},
+  {key:'neg_cred',       label:'Negative credits',              cat:'billing'},
+  {key:'expiry_90',      label:'Credits expiring 90d',          cat:'billing'},
+  {key:'expiry_30',      label:'Credits expiring 30d',          cat:'billing'},
+  {key:'renewal_exp90',  label:'Renewal — expire <90 days',     cat:'billing'},
+  {key:'renewal_expired',label:'Renewal — already expired',     cat:'billing'},
+  {key:'ghost',          label:'Uncontactable ghost',           cat:'ops'},
+  {key:'orphaned',       label:'Orphaned accounts',             cat:'ops'},
+  {key:'large_no_cp',    label:'51+ no channel partner',        cat:'ops'},
+];
+const FLAG_META={
+  stale_large:{label:'Stale large',dot:'fd-r'},declining:{label:'Declining activity',dot:'fd-r'},
+  never_enrolled:{label:'Never enrolled',dot:'fd-r'},trial_expiring:{label:'Trial expiring',dot:'fd-r'},
+  enrolled_never:{label:'Enrolled never used',dot:'fd-a'},low_cmd:{label:'Low commands',dot:'fd-a'},
+  all_lowpriv:{label:'All devices low-priv',dot:'fd-a'},single_dev:{label:'Single-device',dot:'fd-a'},
+  large_limited:{label:'Large on limited',dot:'fd-b'},neg_cred:{label:'Negative credits',dot:'fd-b'},
+  expiry_90:{label:'Expiring 90d',dot:'fd-b'},expiry_30:{label:'Expiring 30d',dot:'fd-b'},
+  renewal_exp90:{label:'Renewal exp <90d',dot:'fd-b'},renewal_expired:{label:'Renewal expired',dot:'fd-b'},
+  ghost:{label:'Uncontactable ghost',dot:'fd-g'},orphaned:{label:'Orphaned',dot:'fd-g'},large_no_cp:{label:'No channel partner',dot:'fd-g'},
+};
+const TIER_FN={tier_0:r=>r.dev<=1,tier_1:r=>r.dev>=2&&r.dev<=10,tier_2:r=>r.dev>=11&&r.dev<=50,tier_3:r=>r.dev>=51&&r.dev<=100,tier_4:r=>r.dev>100};
+const CAT_COLORS={churn:['#e24b4a','#c0392b','#e9595a','#d45050'],inactive:['#c68a00','#e5a020','#8a6800','#a07000'],billing:['#1a5fa8','#2980d4','#378ADD','#185FA5','#5ba3e0','#3d7fc0'],ops:['#aaa','#999','#bbb']};
+const PIE_COLORS=['#378ADD','#E24B4A','#EF9F27','#1D9E75','#7F77DD','#B4B2A9','#F09595','#9FE1CB'];
+
+/* ═══ STATE ═══ */
+let allData=[],filtered=[],activeFilter=null,sortKey='dev',sortDir=-1,page=0;
+let trialData=[],trialFiltered=[],trialSortKey='tl_order',trialSortDir=1,trialPage=0;
+let pendingFile=null,pendingFilename='';
+let snapshots=[],chartInstances={};
+
+/* ═══ STORAGE ═══ */
+// loadSnaps and saveSnaps replaced by Supabase versions above
+function clearAllSnaps(){if(!confirm('Delete all saved snapshots?'))return;snapshots=[];saveSnaps();renderSnapsBar();renderTrends();}
+
+/* ═══ TABS ═══ */
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));
+  document.querySelector(`.tab[onclick="switchTab('${t}')"]`).classList.add('active');
+  document.getElementById('tab-'+t).classList.add('active');
+  if(t==='trends')renderTrends();
+  if(t==='trials')renderTrialTable();
+  if(t==='guide')renderGuide();
+  if(t==='cleansing')renderCleansing();
+}
+
+/* ═══ DROP ZONE ═══ */
+const dz=document.getElementById('drop-zone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag-over')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag-over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag-over');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0])});
+function handleFile(f){
+  pendingFile=f;pendingFilename=f.name;
+  const m=f.name.match(/(\d{4})(\d{2})(\d{2})/);
+  document.getElementById('modal-filename').textContent='📄 '+f.name;
+  document.getElementById('modal-date').value=m?`${m[1]}-${m[2]}-${m[3]}`:'';
+  document.getElementById('date-modal').classList.add('visible');
+}
+function cancelUpload(){pendingFile=null;document.getElementById('date-modal').classList.remove('visible');}
+function confirmUpload(){
+  const dv=document.getElementById('modal-date').value;
+  if(!dv){alert('Please select a date.');return;}
+  document.getElementById('date-modal').classList.remove('visible');
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+      let sn=wb.SheetNames[0];
+      for(const s of wb.SheetNames){try{const r=XLSX.utils.decode_range(wb.Sheets[s]['!ref']||'A1');if(r.e.r>100){sn=s;break;}}catch(e){}}
+      processData(XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:null,raw:false}),pendingFilename,dv);
+    }catch(err){alert('Error: '+err.message);}
+  };
+  reader.readAsArrayBuffer(pendingFile);
+}
+
+/* ═══ HELPERS ═══ */
+function pn(v){if(v===null||v===undefined||v==='')return null;const n=parseFloat(String(v).replace(/,/g,''));return isNaN(n)?null:n;}
+function pd(v){if(!v)return null;if(v instanceof Date)return isNaN(v.getTime())?null:v;try{const d=new Date(v);return isNaN(d.getTime())?null:d;}catch(e){return null;}}
+function cl(v){if(v===null||v===undefined)return '';const s=String(v).trim();return(s===''||s==='nan'||s.toLowerCase()==='undefined'||s.toLowerCase()==='null')?'':s;}
+function setText(id,val){const el=document.getElementById(id);if(el)el.textContent=val;}
+
+/* ═══ TRAFFIC LIGHT ═══ */
+function tlScore(dev,cmd,cpd,daysSince,allLP,trDays,trialActive){
+  if(dev===0){
+    // Trial phase, 0 devices
+    if(trialActive&&trDays!==null){
+      if(trDays<=3) return 'red';
+      if(trDays<=15) return 'red';
+      if(trDays<=27) return 'amber';
+      return 'green';
+    }
+    return 'grey';
+  }
+  if(allLP||(cmd===0&&dev>0)) return 'red';
+  const large=dev>500,medium=dev>100&&dev<=500;
+  // Trial phase with devices
+  if(trialActive&&trDays!==null){
+    if(trDays<=3) return 'red';
+    if(trDays<=15&&daysSince!==null&&daysSince>=15) return 'red';
+    if(trDays<=27&&daysSince!==null&&daysSince>=3) return 'amber';
+    return 'green';
+  }
+  // Post-trial
+  if(large){if(daysSince!==null&&daysSince>=14)return 'red';if(daysSince!==null&&daysSince<=3&&cpd>=5)return 'green';}
+  else if(medium){if(daysSince!==null&&daysSince>=30)return 'red';if(daysSince!==null&&daysSince<=7&&cpd>=3)return 'green';}
+  else{if(daysSince!==null&&daysSince>=90)return 'red';if(daysSince!==null&&daysSince<=14&&cpd>=2)return 'green';}
+  return 'amber';
+}
+const TL_ORDER={red:0,amber:1,green:2,grey:3};
+
+/* ═══ DATA PROCESSING ═══ */
+function processData(raw,filename,dateStr){
+  const processed=[],oemCount={},ghostOEM={},negOEM={},oneDevOEM={};
+  for(const r of raw){
+    const get=(...keys)=>{for(const k of Object.keys(r)){const kl=k.toLowerCase();if(keys.some(t=>kl.includes(t)))return r[k];}return null;};
+    const domain=cl(get('domain'));if(!domain)continue;if(domain.toLowerCase().includes('default'))continue;
+    const ct=cl(get('country'));
+    if(ct.toLowerCase()===EXCLUDE_COUNTRY)continue;
+    // DEAD ACCOUNT RULE — activate next week when last activity covers all 60k accounts
+    // Definition: limited=TRUE AND last activity > 6 months ago
+    // To activate: uncomment the line below
+    // if(lim && daysSince !== null && daysSince > 180) continue;
+
+    // Exclude OEM=undefined with no activity in last 6 months
+    const oem_raw=cl(get('oem'))||'undefined';
+    if(oem_raw.toLowerCase()==='undefined'){const la_check=pd(get('last activity'));const ds_check=la_check?Math.floor((TODAY-la_check)/86400000):null;if(ds_check===null||ds_check>180)continue;}
+    const dev    =pn(get('num of devices','devices'))||0;
+    const cr     =pn(get('credits'));
+    const cmd    =pn(get('num commands','commands'))||0;
+    const oem    =cl(get('oem'))||'undefined';
+    const co     =cl(get('company'));
+    const cp     =cl(get('channel partner'));
+    const email  =cl(get('admin email','email'));
+    const lim    =cl(get('limited')).toLowerCase()==='true';
+    const tr     =cl(get('trial?','trial')).toLowerCase()==='true';
+    const te     =pd(get('taril end','trial end'));
+    const ts     =pd(get('trail start','trial start'));
+    const la     =pd(get('last activity'));
+    const trDays =pn(get('trails days left','trial days'));
+    const dlRaw  =pn(get('days left'));
+    const lowP   =pn(get('is device low priv'))||0;
+    const created=pd(get('create date'));
+    const smartExp=pd(get('smart expire date'));
+    const andD   =pn(get('android'))||0;
+    const winD   =pn(get('windows'))||0;
+
+    const cpd         =dev>0?cmd/dev:0;
+    const daysSince   =la?Math.floor((TODAY-la)/86400000):null;
+    const daysSinceTE =te?Math.floor((TODAY-te)/86400000):null;
+    const daysIntoTrial=ts?Math.floor((TODAY-ts)/86400000):null;
+    const daysToSmartExp=smartExp?Math.floor((smartExp-TODAY)/86400000):null;
+    const allLP       =dev>0&&lowP>=dev;
+    const someLP      =dev>0&&lowP>0&&lowP<dev;
+    const hasContact  =!!email||!!co||!!la;
+    const noCP        =!cp||['nan',''].includes(cp.toLowerCase());
+    const trialActive =tr&&trDays!==null&&trDays>0;
+
+    // compute days_left
+    let daysLeft=dlRaw;
+    if((daysLeft===null||isNaN(daysLeft))&&cr>0&&dev>0)daysLeft=cr/dev;
+    if(daysLeft>EXPIRY_CAP)daysLeft=null;
+
+    // flags
+    const flags=[];
+    if(dev>=51&&!la)                                                 flags.push('stale_large');
+    if(dev>0&&cmd>0&&daysSince!==null&&daysSince>=DECLINE_DAYS)     flags.push('declining');
+    if(dev===0&&hasContact)                                          flags.push('never_enrolled');
+    if(trialActive&&trDays<=30)                                      flags.push('trial_expiring');
+    if(dev>0&&cmd===0)                                               flags.push('enrolled_never');
+    if(dev>0&&cmd>0&&la&&cpd<LOW_CMD)                               flags.push('low_cmd');
+    if(allLP)                                                        flags.push('all_lowpriv');
+    // revised single_dev: 1 device + trial ended 0-90d ago + no activity 90+d
+    if(dev===1&&daysSinceTE!==null&&daysSinceTE>=0&&daysSinceTE<=SINGLE_DEV_DAYS&&(la===null||daysSince>=90)) flags.push('single_dev');
+    if(dev>=51&&lim)                                                 flags.push('large_limited');
+    if(cr!==null&&cr<0)                                              flags.push('neg_cred');
+    if(daysLeft!==null&&daysLeft>0&&daysLeft<=90)                   flags.push('expiry_90');
+    if(daysLeft!==null&&daysLeft>0&&daysLeft<=30)                   flags.push('expiry_30');
+    if(daysToSmartExp!==null&&daysToSmartExp>0&&daysToSmartExp<=90) flags.push('renewal_exp90');
+    const daysSinceSmartExp=smartExp?Math.floor((TODAY-smartExp)/86400000):null;if(daysSinceSmartExp!==null&&daysSinceSmartExp>=0&&daysSinceSmartExp<=90) flags.push('renewal_expired');
+    if(dev===0&&!hasContact){flags.push('ghost');ghostOEM[oem]=(ghostOEM[oem]||0)+1;}
+    if(!email&&!co&&!la)                                             flags.push('orphaned');
+    if(dev>=51&&noCP)                                                flags.push('large_no_cp');
+
+    oemCount[oem]=(oemCount[oem]||0)+1;
+    if(cr!==null&&cr<0)negOEM[oem]=(negOEM[oem]||0)+1;
+    if(flags.includes('single_dev'))oneDevOEM[oem]=(oneDevOEM[oem]||0)+1;
+
+    const tl=tlScore(dev,cmd,Math.round(cpd*10)/10,daysSince,allLP,trDays,trialActive);
+
+    processed.push({
+      d:domain.slice(0,40),co:co.slice(0,35),ct:ct.slice(0,20),
+      email:email.slice(0,45),oem,dev,cr,cmd,
+      cpd:Math.round(cpd*10)/10,lim,tr,
+      te:te?te.toISOString().slice(0,10):'',
+      trDays,la:la?la.toISOString().slice(0,10):'',
+      created:created?created.toISOString().slice(0,10):'',
+      daysLeft:daysLeft?Math.round(daysLeft):null,
+      daysSince,daysIntoTrial,daysToSmartExp,
+      allLP,someLP,lowP,tl,tl_order:TL_ORDER[tl]??3,f:flags,
+      and:Math.round(andD),win:Math.round(winD)
+    });
+  }
+  allData=processed;
+  trialData=allData.filter(r=>r.tr&&r.trDays!==null&&r.trDays>0);
+
+  // counts
+  const counts={};ALERTS.forEach(a=>counts[a.key]=0);
+  ['tier_0','tier_1','tier_2','tier_3','tier_4'].forEach(k=>counts[k]=0);
+  let cpdVals=[],someLPCount=0,allLPTrialCount=0;
+  for(const r of allData){
+    r.f.forEach(f=>{if(counts[f]!==undefined)counts[f]++;});
+    if(r.dev<=1)counts.tier_0++;else if(r.dev<=10)counts.tier_1++;else if(r.dev<=50)counts.tier_2++;else if(r.dev<=100)counts.tier_3++;else counts.tier_4++;
+    if(r.dev>0&&r.cmd>0&&r.la)cpdVals.push(r.cpd);
+    if(r.someLP)someLPCount++;
+    if(r.allLP&&r.tr)allLPTrialCount++;
+  }
+  const sortedCpd=[...cpdVals].sort((a,b)=>a-b);
+  const median=sortedCpd.length?sortedCpd[Math.floor(sortedCpd.length/2)]:0;
+
+  // update cards
+  const idMap={stale_large:'n-stale',declining:'n-declining',never_enrolled:'n-never-enrolled',trial_expiring:'n-trial-expiring',enrolled_never:'n-never',low_cmd:'n-lowcmd',all_lowpriv:'n-lowpriv',single_dev:'n-single',large_limited:'n-llim',neg_cred:'n-negcred',expiry_90:'n-expiry90',expiry_30:'n-expiry30',renewal_exp90:'n-renewal90',renewal_expired:'n-renewal-exp',ghost:'n-ghost',orphaned:'n-orphaned',large_no_cp:'n-nocp'};
+  Object.entries(idMap).forEach(([k,id])=>{const el=document.getElementById(id);if(el)el.textContent=counts[k].toLocaleString();});
+  ['t0','t1','t2','t3','t4'].forEach((t,i)=>{const el=document.getElementById('n-'+t);if(el)el.textContent=counts['tier_'+i].toLocaleString();});
+
+  // Trial monitor summary
+  const tmRed=trialData.filter(r=>r.tl==='red').length;
+  const tmAmber=trialData.filter(r=>r.tl==='amber').length;
+  const tmGreen=trialData.filter(r=>r.tl==='green').length;
+  const tmNoDev=trialData.filter(r=>r.dev===0).length;
+  setText('tm-red',tmRed.toLocaleString());
+  setText('tm-amber',tmAmber.toLocaleString());
+  setText('tm-green',tmGreen.toLocaleString());
+  setText('tm-total',trialData.length.toLocaleString());
+  setText('tm-nodev',tmNoDev.toLocaleString());
+  const badge=document.getElementById('trial-badge');
+  badge.textContent=trialData.length;badge.style.display='';
+  // populate trial OEM filter
+  const tmOEMSel=document.getElementById('tm-oem-filter');
+  const oemSet=new Set(trialData.map(r=>r.oem));
+  tmOEMSel.innerHTML='<option value="all">All OEMs</option>'+[...oemSet].sort().map(o=>`<option value="${o}">${o}</option>`).join('');
+
+  // insight panels
+  const wasActive=allData.filter(r=>r.dev>0&&r.cmd>0&&r.daysSince!==null);
+  const fresh=wasActive.filter(r=>r.daysSince<14).length;
+  const mid2=wasActive.filter(r=>r.daysSince>=14&&r.daysSince<30).length;
+  const old=wasActive.filter(r=>r.daysSince>=30).length;
+  setText('dec-sub',`— ${wasActive.length.toLocaleString()} previously active accounts`);
+  setText('dec-count',old.toLocaleString()+' flagged');
+  setText('dec-fresh',fresh.toLocaleString());setText('dec-mid',mid2.toLocaleString());setText('dec-old',old.toLocaleString());
+  buildBars('dec-bars',[{l:'<1 week',n:wasActive.filter(r=>r.daysSince<7).length,c:'fill-green'},{l:'1–2 weeks',n:wasActive.filter(r=>r.daysSince>=7&&r.daysSince<14).length,c:'fill-green'},{l:'2–4 weeks',n:wasActive.filter(r=>r.daysSince>=14&&r.daysSince<30).length,c:'fill-amber'},{l:'1–2 months',n:wasActive.filter(r=>r.daysSince>=30&&r.daysSince<60).length,c:'fill-red'},{l:'> 2 months',n:wasActive.filter(r=>r.daysSince>=60).length,c:'fill-red'}]);
+  const neActs=allData.filter(r=>r.f.includes('never_enrolled'));
+  setText('ne-sub',`— ${counts.never_enrolled.toLocaleString()} reachable accounts`);
+  setText('ne-reach',counts.never_enrolled.toLocaleString());setText('ne-ghost',counts.ghost.toLocaleString());
+  buildBars('ne-bars',[{l:'Email+company',n:neActs.filter(r=>r.co&&r.la).length,c:'fill-amber'},{l:'Email only',n:neActs.filter(r=>!r.co&&!r.la).length,c:'fill-amber'},{l:'Has activity',n:neActs.filter(r=>r.la).length,c:'fill-blue'}]);
+  const trActs=allData.filter(r=>r.tr&&r.trDays!==null&&r.trDays>0);
+  const t3=trActs.filter(r=>r.trDays<=3).length,t15=trActs.filter(r=>r.trDays>3&&r.trDays<=15).length,t30=trActs.filter(r=>r.trDays>15&&r.trDays<=30).length;
+  setText('te-sub',`— ${trActs.length.toLocaleString()} active trials`);
+  setText('te-3',t3.toLocaleString());setText('te-15',t15.toLocaleString());setText('te-30',t30.toLocaleString());setText('te-total',trActs.length.toLocaleString());
+  buildBars('te-bars',[{l:'Critical <3d',n:t3,c:'fill-red'},{l:'High 3–15d',n:t15,c:'fill-red'},{l:'Mid 15–30d',n:t30,c:'fill-amber'},{l:'OK 30+d',n:trActs.filter(r=>r.trDays>30).length,c:'fill-green'}]);
+  setText('lc-sub',`— ${cpdVals.length.toLocaleString()} active accounts`);
+  setText('lc-count',counts.low_cmd.toLocaleString()+' flagged');
+  setText('lc-act',cpdVals.length.toLocaleString());setText('lc-med',median.toFixed(1));setText('lc-below',counts.low_cmd.toLocaleString());
+  buildBars('lc-bars',[{l:'< 1',n:cpdVals.filter(v=>v<1).length,c:'fill-red'},{l:'1–2',n:cpdVals.filter(v=>v>=1&&v<2).length,c:'fill-amber'},{l:'2–5',n:cpdVals.filter(v=>v>=2&&v<5).length,c:'fill-amber'},{l:'5–10',n:cpdVals.filter(v=>v>=5&&v<10).length,c:'fill-grey'},{l:'> 10',n:cpdVals.filter(v=>v>=10).length,c:'fill-green'}]);
+  setText('lp-sub',`— ${(counts.all_lowpriv+someLPCount).toLocaleString()} accounts with any low-priv devices`);
+  setText('lp-count',counts.all_lowpriv.toLocaleString()+' accounts');
+  setText('lp-all',counts.all_lowpriv.toLocaleString());setText('lp-some',someLPCount.toLocaleString());setText('lp-trial',allLPTrialCount.toLocaleString());
+  buildBars('lp-bars',[{l:'All LP',n:counts.all_lowpriv,c:'fill-red'},{l:'Some LP',n:someLPCount,c:'fill-amber'},{l:'None LP',n:allData.filter(r=>r.dev>0&&r.lowP===0).length,c:'fill-green'}]);
+  const sdActs=allData.filter(r=>r.f.includes('single_dev'));
+  setText('sd-sub',`— ${sdActs.length.toLocaleString()} accounts`);
+  buildBars('sd-bars',[{l:'0–30d since end',n:sdActs.filter(r=>r.daysSince>=0&&r.daysSince<=30).length,c:'fill-red'},{l:'30–60d since end',n:sdActs.filter(r=>r.daysSince>30&&r.daysSince<=60).length,c:'fill-amber'},{l:'60–90d since end',n:sdActs.filter(r=>r.daysSince>60&&r.daysSince<=90).length,c:'fill-amber'}]);
+  const exp30=allData.filter(r=>r.daysLeft&&r.daysLeft>0&&r.daysLeft<=30).length;
+  const exp60=allData.filter(r=>r.daysLeft&&r.daysLeft>30&&r.daysLeft<=60).length;
+  const exp90b=allData.filter(r=>r.daysLeft&&r.daysLeft>60&&r.daysLeft<=90).length;
+  setText('exp-sub',`— ${allData.filter(r=>r.daysLeft!==null).length.toLocaleString()} accounts with calculable expiry`);
+  setText('exp-30',exp30.toLocaleString());setText('exp-60',exp60.toLocaleString());setText('exp-90',exp90b.toLocaleString());
+  buildBars('exp-bars',[{l:'<30 days',n:exp30,c:'fill-red'},{l:'30–60d',n:exp60,c:'fill-amber'},{l:'60–90d',n:exp90b,c:'fill-amber'},{l:'No risk',n:allData.filter(r=>!r.daysLeft).length,c:'fill-green'}]);
+  const oemList=Object.entries(ghostOEM).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  setText('gh-sub',`— ${counts.ghost.toLocaleString()} uncontactable accounts`);
+  setText('gh-total',allData.length.toLocaleString());
+  setText('gh-pct',((counts.ghost/allData.length)*100).toFixed(1)+'%');
+  buildBars('gh-bars',oemList.map(([o,n],i)=>({l:o,n,c:i<2?'fill-red':i<5?'fill-amber':'fill-grey'})),true,counts.ghost);
+
+  // save snapshot
+  const snap={date:dateStr,filename,total:allData.length,counts:{...counts},
+    oemCounts:Object.fromEntries(Object.entries(oemCount).sort((a,b)=>b[1]-a[1]).slice(0,10)),
+    ghostOEM:Object.fromEntries(Object.entries(ghostOEM).sort((a,b)=>b[1]-a[1]).slice(0,8)),
+    negOEM:Object.fromEntries(Object.entries(negOEM).sort((a,b)=>b[1]-a[1]).slice(0,8)),
+    oneDevOEM:Object.fromEntries(Object.entries(oneDevOEM).sort((a,b)=>b[1]-a[1]).slice(0,8))};
+  const idx=snapshots.findIndex(s=>s.date===dateStr);
+  if(idx>=0)snapshots[idx]=snap;else snapshots.push(snap);
+  snapshots.sort((a,b)=>a.date.localeCompare(b.date));
+  saveSnapshotToServer(snap);
+
+  dz.classList.add('loaded');
+  dz.innerHTML=`<div class="dz-loaded">✓ ${filename} (${dateStr}) — ${allData.length.toLocaleString()} accounts · Ghana excluded &nbsp;·&nbsp; <span style="cursor:pointer;text-decoration:underline;color:#0F6E56" onclick="document.getElementById('file-input').click()">Load another</span></div><input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFile(this.files[0])" style="display:none">`;
+  document.getElementById('page-sub').textContent=`${allData.length.toLocaleString()} accounts (Ghana excluded) · ${filename} · ${dateStr}`;
+  document.getElementById('main-dashboard').style.display='block';
+  document.getElementById('trial-empty').style.display='none';
+  document.getElementById('trial-content').style.display='block';
+  const sb=document.getElementById('snap-badge');sb.textContent=snapshots.length;sb.style.display='';
+  activeFilter=null;sortKey='dev';sortDir=-1;page=0;
+  document.querySelectorAll('[data-filter]').forEach(c=>c.classList.remove('active'));
+  document.querySelectorAll('.insight-panel').forEach(p=>p.classList.remove('visible'));
+  populateTrendFilters();renderSnapsBar();applyFilters();renderTrialTable();
+  buildInsights(allData, 'all');
+}
+
+function buildBars(id,data,showPct=false,total=0){
+  const max=Math.max(...data.map(d=>d.n),1);
+  document.getElementById(id).innerHTML=data.map(d=>{
+    const w=(d.n/max*100).toFixed(1);
+    const pct=showPct&&total>0?`<span style="font-size:10px;color:#bbb;width:36px;text-align:right;flex-shrink:0">${(d.n/total*100).toFixed(1)}%</span>`:'';
+    return`<div class="bar-row"><div class="bar-name">${d.l}</div><div class="bar-track"><div class="bar-fill ${d.c}" style="width:0%" data-w="${w}"></div></div><div class="bar-n">${d.n.toLocaleString()}</div>${pct}</div>`;
+  }).join('');
+}
+
+/* ═══ PANELS ═══ */
+function closePanel(id){document.getElementById(id).classList.remove('visible');}
+function openPanel(id){
+  document.querySelectorAll('.insight-panel').forEach(p=>p.classList.remove('visible'));
+  document.getElementById(id).classList.add('visible');
+  setTimeout(()=>document.querySelectorAll('#'+id+' [data-w]').forEach(el=>el.style.width=el.dataset.w+'%'),40);
+}
+document.querySelectorAll('[data-filter]').forEach(card=>{
+  card.addEventListener('click',()=>{
+    if(!allData.length)return;
+    const f=card.dataset.filter,pid=card.dataset.panel,wasActive=activeFilter===f;
+    document.querySelectorAll('[data-filter]').forEach(c=>c.classList.remove('active'));
+    document.querySelectorAll('.insight-panel').forEach(p=>p.classList.remove('visible'));
+    if(!wasActive){activeFilter=f;card.classList.add('active');if(pid)openPanel(pid);}
+    else activeFilter=null;
+    page=0;applyFilters();
+  });
+});
+
+/* ═══ MAIN TABLE ═══ */
+function applyFilters(){
+  const q=document.getElementById('search').value.toLowerCase();
+  filtered=allData.filter(r=>{
+    if(activeFilter){if(TIER_FN[activeFilter]){if(!TIER_FN[activeFilter](r))return false;}else if(!r.f.includes(activeFilter))return false;}
+    if(q&&!(r.d+' '+r.co+' '+r.ct+' '+r.email).toLowerCase().includes(q))return false;
+    return true;
+  });
+  filtered.sort((a,b)=>{let av=a[sortKey],bv=b[sortKey];if(av==null)av=sortDir>0?Infinity:-Infinity;if(bv==null)bv=sortDir>0?Infinity:-Infinity;return typeof av==='string'?sortDir*av.localeCompare(bv):sortDir*(av-bv);});
+  updateChip();renderTable();
+}
+function updateChip(){
+  const el=document.getElementById('chips'),title=document.getElementById('tbl-title'),count=document.getElementById('tbl-count');
+  if(activeFilter){const meta=FLAG_META[activeFilter];const label=meta?meta.label:('Tier '+activeFilter.slice(-1));const dot=meta?meta.dot:'fd-g';el.innerHTML=`<div class="chip"><div class="fdot ${dot}"></div>${label}<span class="chip-x" onclick="clearAll()">✕</span></div>`;title.textContent=label;}
+  else{el.innerHTML='';title.textContent='All accounts';}
+  count.textContent=`${filtered.length.toLocaleString()} of ${allData.length.toLocaleString()} accounts (Ghana excluded)`;
+}
+function clearAll(){activeFilter=null;document.getElementById('search').value='';document.querySelectorAll('[data-filter]').forEach(c=>c.classList.remove('active'));document.querySelectorAll('.insight-panel').forEach(p=>p.classList.remove('visible'));applyFilters();}
+function sortBy(k){if(sortKey===k)sortDir*=-1;else{sortKey=k;sortDir=-1;}document.querySelectorAll('.sarr').forEach(e=>{e.className='sarr';e.textContent='↕';});const el=document.getElementById('s-'+k);if(el){el.className='sarr on';el.textContent=sortDir>0?'↑':'↓';}page=0;applyFilters();}
+const TLC={green:'#1D9E75',amber:'#EF9F27',red:'#E24B4A'};
+function tlDot(tl){return TLC[tl]?`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${TLC[tl]};vertical-align:middle"></span>`:`<span class="muted">—</span>`;}
+function renderTable(){
+  const slice=filtered.slice(page*PAGE,page*PAGE+PAGE);
+  document.getElementById('tbl-body').innerHTML=slice.map(r=>{
+    const flags=r.f.map(f=>{const m=FLAG_META[f];return m?`<span class="rfdot ${m.dot}" title="${m.label}"></span>`:''}).join('');
+    const fw=flags?`<span class="flags">${flags}</span>`:'';
+    const lim=r.lim?`<span class="badge b-lim">limited</span>`:`<span class="muted">—</span>`;
+    const tr=r.tr?`<span class="badge b-trial">trial</span>`:`<span class="muted">—</span>`;
+    const cr=r.cr==null?`<span class="muted">—</span>`:(r.cr<0?`<span class="neg">${r.cr.toLocaleString()}</span>`:r.cr.toLocaleString());
+    const dl=r.daysLeft?Math.round(r.daysLeft).toLocaleString():`<span class="muted">—</span>`;
+    const trd=r.trDays!==null&&r.tr?Math.round(r.trDays):`<span class="muted">—</span>`;
+    return`<tr><td>${fw}${r.d}</td><td>${r.co||'<span class="muted">—</span>'}</td><td>${r.ct||'<span class="muted">—</span>'}</td><td>${r.created||'<span class="muted">—</span>'}</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis">${r.email||'<span class="muted">—</span>'}</td><td><span class="badge b-oem">${r.oem}</span></td><td>${r.dev.toLocaleString()}</td><td>${tr}</td><td>${trd}</td><td>${cr}</td><td>${dl}</td><td>${r.la||'<span class="muted">—</span>'}</td><td>${lim}</td><td>${r.cmd.toLocaleString()}</td><td>${r.dev>0?r.cpd.toFixed(1):'<span class="muted">—</span>'}</td><td>${tlDot(r.tl)}</td></tr>`;
+  }).join('');
+  const total=Math.ceil(filtered.length/PAGE)||1;
+  document.getElementById('page-info').textContent=`Page ${page+1} of ${total} (${filtered.length.toLocaleString()} rows)`;
+  document.getElementById('prev-btn').disabled=page===0;
+  document.getElementById('next-btn').disabled=page>=total-1;
+}
+function changePage(d){page+=d;renderTable();window.scrollTo(0,document.getElementById('tbl-title').offsetTop-20);}
+
+/* ═══ TRIAL MONITOR TABLE ═══ */
+function renderTrialTable(){
+  const tlFilter=document.getElementById('tm-tl-filter')?.value||'all';
+  const oemFilter=document.getElementById('tm-oem-filter')?.value||'all';
+  const q=(document.getElementById('tm-search')?.value||'').toLowerCase();
+  trialFiltered=trialData.filter(r=>{
+    if(window._tmNodevFilter && r.dev!==0) return false;
+    if(tlFilter!=='all'&&r.tl!==tlFilter)return false;
+    if(oemFilter!=='all'&&r.oem!==oemFilter)return false;
+    if(q&&!(r.d+' '+r.co).toLowerCase().includes(q))return false;
+    return true;
+  });
+  trialFiltered.sort((a,b)=>{
+    let av=a[trialSortKey],bv=b[trialSortKey];
+    // secondary sort: tl_order asc, then trDays asc
+    if(trialSortKey==='tl_order'){const tlDiff=(a.tl_order??3)-(b.tl_order??3);if(tlDiff!==0)return tlDiff;return (a.trDays??999)-(b.trDays??999);}
+    if(av==null)av=trialSortDir>0?Infinity:-Infinity;
+    if(bv==null)bv=trialSortDir>0?Infinity:-Infinity;
+    return typeof av==='string'?trialSortDir*av.localeCompare(bv):trialSortDir*(av-bv);
+  });
+  const slice=trialFiltered.slice(trialPage*TRIAL_PAGE,trialPage*TRIAL_PAGE+TRIAL_PAGE);
+  document.getElementById('trial-body').innerHTML=slice.map(r=>{
+    const tld=tlDot(r.tl);
+    const di=r.daysIntoTrial!==null?r.daysIntoTrial+'d':`<span class="muted">—</span>`;
+    const trd=r.trDays!==null?Math.round(r.trDays)+'d':`<span class="muted">—</span>`;
+    const lp=r.lowP>0?`<span style="color:#854F0B;font-weight:500">${r.lowP}</span>`:r.lowP;
+    const trDStyle=r.trDays!==null&&r.trDays<=3?'color:#A32D2D;font-weight:500':r.trDays<=15?'color:#854F0B;font-weight:500':'';
+    return`<tr><td>${tld}</td><td>${r.d}</td><td>${r.co||'<span class="muted">—</span>'}</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis">${r.email||'<span class="muted">—</span>'}</td><td><span class="badge b-oem">${r.oem}</span></td><td>${di}</td><td style="${trDStyle}">${trd}</td><td>${r.dev.toLocaleString()}</td><td>${r.cmd.toLocaleString()}</td><td>${lp}</td><td>${r.la||'<span class="muted">—</span>'}</td><td>${r.ct||'<span class="muted">—</span>'}</td></tr>`;
+  }).join('');
+  const total=Math.ceil(trialFiltered.length/TRIAL_PAGE)||1;
+  document.getElementById('tm-page-info').textContent=`Page ${trialPage+1} of ${total} (${trialFiltered.length.toLocaleString()} trials)`;
+  document.getElementById('tm-prev').disabled=trialPage===0;
+  document.getElementById('tm-next').disabled=trialPage>=total-1;
+}
+function sortTrial(k){
+  if(trialSortKey===k)trialSortDir*=-1;else{trialSortKey=k;trialSortDir=k==='tl_order'?1:-1;}
+  document.querySelectorAll('[id^="ts-"]').forEach(e=>{e.className='sarr';e.textContent='↕';});
+  const map={tl_order:'ts-tl',d:'ts-d',co:'ts-co',email:'ts-email',oem:'ts-oem',daysIntoTrial:'ts-dit',trDays:'ts-trd',dev:'ts-dev',cmd:'ts-cmd',lowP:'ts-lp',la:'ts-la',ct:'ts-ct'};
+  const el=document.getElementById(map[k]);if(el){el.className='sarr on';el.textContent=trialSortDir>0?'↑':'↓';}
+  trialPage=0;renderTrialTable();
+}
+function resetTrialFilters(){document.getElementById('tm-tl-filter').value='all';document.getElementById('tm-oem-filter').value='all';document.getElementById('tm-search').value='';trialPage=0;renderTrialTable();}
+function changeTrialPage(d){trialPage+=d;renderTrialTable();}
+
+/* ═══ SNAPSHOTS BAR ═══ */
+function renderSnapsBar(){
+  const bar=document.getElementById('snapshots-bar');
+  if(!snapshots.length){bar.innerHTML='';return;}
+  bar.innerHTML='<span class="snap-label">Snapshots:</span>'+snapshots.map((s,i)=>`<span class="snap-chip ${i===snapshots.length-1?'current':''}">📅 ${s.date}<span class="snap-x" onclick="deleteSnap(${i})">×</span></span>`).join('');
+}
+function deleteSnap(i){snapshots.splice(i,1);saveSnaps();renderSnapsBar();renderTrends();const b=document.getElementById('snap-badge');if(snapshots.length){b.textContent=snapshots.length;b.style.display='';}else b.style.display='none';}
+
+/* ═══ TRENDS ═══ */
+function populateTrendFilters(){
+  const oemSet=new Set();snapshots.forEach(s=>Object.keys(s.oemCounts||{}).forEach(o=>oemSet.add(o)));
+  const oemSel=document.getElementById('oem-filter');const cur=oemSel.value;
+  oemSel.innerHTML='<option value="all">All OEMs</option>'+[...oemSet].sort().map(o=>`<option value="${o}"${o===cur?' selected':''}>${o}</option>`).join('');
+  const dates=snapshots.map(s=>s.date);
+  const fromSel=document.getElementById('date-from');const toSel=document.getElementById('date-to');
+  const cf=fromSel.value,ct=toSel.value;
+  fromSel.innerHTML='<option value="">From — all</option>'+dates.map(d=>`<option value="${d}"${d===cf?' selected':''}>${d}</option>`).join('');
+  toSel.innerHTML='<option value="">To — all</option>'+dates.map(d=>`<option value="${d}"${d===ct?' selected':''}>${d}</option>`).join('');
+}
+function clearTrendFilters(){document.getElementById('oem-filter').value='all';document.getElementById('date-from').value='';document.getElementById('date-to').value='';renderTrends();}
+function renderTrends(){
+  buildInsights(allData, document.getElementById('oem-filter')?.value||'all');
+  if(!snapshots.length){
+    document.getElementById('pie-grid').innerHTML='<div class="info-note">Load your first xlsx to see charts</div>';
+    document.getElementById('trend-charts-block').innerHTML='<div class="info-note">Load 2 or more weekly files to see trend lines</div>';
+    document.getElementById('snap-tbl-body').innerHTML='';return;
+  }
+  populateTrendFilters();
+  const oemFilter=document.getElementById('oem-filter').value;
+  const fromFilter=document.getElementById('date-from').value;
+  const toFilter=document.getElementById('date-to').value;
+  let snaps=[...snapshots];
+  if(fromFilter)snaps=snaps.filter(s=>s.date>=fromFilter);
+  if(toFilter)snaps=snaps.filter(s=>s.date<=toFilter);
+  renderPies(snaps[0]||snapshots[0],oemFilter);
+  renderTrendLines(snaps,oemFilter);
+  document.getElementById('snap-tbl-body').innerHTML=snapshots.map((s,i)=>`<tr><td>${s.date}</td><td>${s.filename}</td><td>${s.total.toLocaleString()}</td><td>${(s.counts.stale_large||0).toLocaleString()}</td><td>${(s.counts.declining||0).toLocaleString()}</td><td>${(s.counts.renewal_expired||0).toLocaleString()}</td><td>${(s.counts.expiry_30||0).toLocaleString()}</td><td><span class="snap-del" onclick="deleteSnap(${i})">×</span></td></tr>`).join('');
+}
+
+function renderPies(snap,oemFilter){
+  const grid=document.getElementById('pie-grid');
+  if(!snap){grid.innerHTML='<div class="info-note">Load your first xlsx to see charts</div>';return;}
+  const pieDefs=[
+    {title:'Accounts by OEM',data:snap.oemCounts||{}},
+    {title:'0-device accounts by OEM',data:snap.ghostOEM||{}},
+    {title:'Negative credits by OEM',data:snap.negOEM||{}},
+    {title:'1-device stalled accounts by OEM',data:snap.oneDevOEM||{}},
+  ];
+  grid.innerHTML=pieDefs.map((p,pi)=>`<div class="pie-card"><div class="pie-card-title">${p.title}</div><div class="pie-wrap"><canvas id="pie-${pi}"></canvas></div><div class="pie-legend" id="pie-leg-${pi}"></div></div>`).join('');
+  pieDefs.forEach((p,pi)=>{
+    let entries=Object.entries(p.data).sort((a,b)=>b[1]-a[1]);
+    if(oemFilter!=='all')entries=entries.filter(([oem])=>oem===oemFilter);
+    if(!entries.length){document.getElementById(`pie-leg-${pi}`).innerHTML='<div class="info-note">No data for selected OEM</div>';return;}
+    const labels=entries.map(([oem])=>oem);
+    const vals=entries.map(([,n])=>n);
+    const colors=PIE_COLORS.slice(0,labels.length);
+    const total=vals.reduce((s,v)=>s+v,0);
+    const cid=`pie-${pi}`;
+    if(chartInstances[cid])chartInstances[cid].destroy();
+    chartInstances[cid]=new Chart(document.getElementById(cid).getContext('2d'),{
+      type:'doughnut',
+      data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:2,borderColor:'#fff'}]},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{label:c=>`${c.label}: ${c.parsed.toLocaleString()} (${total>0?Math.round(c.parsed/total*100):0}%)`}},
+          // numbers inside pie slices
+          datalabels:{display:false}
+        },
+        layout:{padding:10}
+      },
+      plugins:[{
+        id:'pieLabels',
+        afterDraw(chart){
+          const {ctx,chartArea:{width,height}}=chart;
+          chart.data.datasets.forEach((dataset,di)=>{
+            chart.getDatasetMeta(di).data.forEach((arc,i)=>{
+              const val=dataset.data[i];
+              const pct=total>0?Math.round(val/total*100):0;
+              if(pct<5)return; // skip tiny slices
+              const mid=(arc.startAngle+arc.endAngle)/2;
+              const r=arc.outerRadius*0.65;
+              const x=arc.x+Math.cos(mid)*r;
+              const y=arc.y+Math.sin(mid)*r;
+              ctx.save();
+              ctx.fillStyle='#fff';
+              ctx.font='bold 11px -apple-system,sans-serif';
+              ctx.textAlign='center';
+              ctx.textBaseline='middle';
+              const label=labels.length===1?val.toLocaleString():pct+'%';
+              ctx.fillText(label,x,y);
+              ctx.restore();
+            });
+          });
+        }
+      }]
+    });
+    document.getElementById(`pie-leg-${pi}`).innerHTML=labels.slice(0,6).map((l,i)=>`<div class="pie-leg-row"><div class="pie-leg-dot" style="background:${colors[i]}"></div>${l}<span style="margin-left:auto;color:#aaa;font-size:10px">${vals[i].toLocaleString()} (${total>0?Math.round(vals[i]/total*100):0}%)</span></div>`).join('');
+  });
+}
+
+function renderTrendLines(snaps,oemFilter){
+  const block=document.getElementById('trend-charts-block');
+  if(snaps.length<2){block.innerHTML='<div class="info-note">Load 2 or more weekly files (within selected date range) to see trend lines</div>';return;}
+  const dates=snaps.map(s=>s.date);
+  const cats=['churn','inactive','billing','ops'];
+  const catLabels={churn:'Churn risk',inactive:'Inactive',billing:'Billing / upsell',ops:'Ops / data'};
+  const catClass={churn:'cat-churn',inactive:'cat-inactive',billing:'cat-billing',ops:'cat-ops'};
+  block.innerHTML=cats.map(cat=>{
+    const alerts=ALERTS.filter(a=>a.cat===cat);
+    return`<div class="cat-section"><div class="cat-label ${catClass[cat]}">${catLabels[cat]}</div><div class="charts-grid">${alerts.map(a=>`<div class="chart-card"><div class="chart-title">${a.label}</div><div class="chart-num" id="tn-${a.key}">—</div><div class="chart-delta" id="td-${a.key}"></div><div class="chart-wrap"><canvas id="tc-${a.key}"></canvas></div></div>`).join('')}</div></div>`;
+  }).join('');
+  cats.forEach(cat=>{
+    const alerts=ALERTS.filter(a=>a.cat===cat);
+    alerts.forEach((a,ai)=>{
+      const vals=snaps.map(s=>s.counts[a.key]||0);
+      const latest=vals[vals.length-1],prev=vals.length>1?vals[vals.length-2]:null;
+      setText(`tn-${a.key}`,latest.toLocaleString());
+      if(prev!==null){const diff=latest-prev,pct=prev>0?((diff/prev)*100).toFixed(1):'100';const el=document.getElementById(`td-${a.key}`);if(diff>0){el.className='chart-delta delta-up';el.textContent=`▲ ${Math.abs(diff).toLocaleString()} (+${pct}%)`;}else if(diff<0){el.className='chart-delta delta-down';el.textContent=`▼ ${Math.abs(diff).toLocaleString()} (${pct}%)`;}else{el.className='chart-delta delta-flat';el.textContent='No change';}}
+      const cid='tc-'+a.key;
+      if(chartInstances[cid])chartInstances[cid].destroy();
+      const color=(CAT_COLORS[cat]||['#aaa'])[ai%(CAT_COLORS[cat]||['#aaa']).length];
+      chartInstances[cid]=new Chart(document.getElementById(cid).getContext('2d'),{type:'line',data:{labels:dates,datasets:[{data:vals,borderColor:color,backgroundColor:color+'22',borderWidth:2,pointBackgroundColor:color,pointRadius:3,fill:true,tension:.3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y.toLocaleString()} accounts`}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#aaa',maxRotation:45}},y:{grid:{color:'#f2f1ed'},ticks:{font:{size:9},color:'#aaa'},beginAtZero:false}}}});
+    });
+  });
+}
+
+/* ═══ INIT ═══ */
+// Load data from Supabase on page load
+(async function(){
+  await checkAuth();
+  await loadSnaps();
+  renderSnapsBar();
+  if(snapshots.length){
+    const b=document.getElementById('snap-badge');
+    b.textContent=snapshots.length;
+    b.style.display='';
+    populateTrendFilters();
+  }
+  // Show viewer drop zone message once loaded
+  const dzv = document.getElementById('dz-viewer-content');
+  if(dzv && !isAdmin){
+    dzv.innerHTML = snapshots.length
+      ? `<div style="font-size:13px;font-weight:500;color:#0F6E56">✓ ${snapshots[snapshots.length-1].date} — ${(snapshots[snapshots.length-1].total||0).toLocaleString()} accounts loaded</div><div style="font-size:11px;color:#aaa;margin-top:4px">View-only mode · <span style="cursor:pointer;text-decoration:underline" onclick="showLoginModal()">Admin login</span></div>`
+      : `<div style="font-size:13px;color:#aaa">No data uploaded yet</div>`;
+  }
+})();
+
+const GUIDE_ALERTS = [
+  {cat:'churn', name:'Stale large accounts', condition:'devices >= 51  AND  no last activity date', threshold:'51 devices', why:'Large accounts gone completely silent. Highest-value churn risk.'},
+  {cat:'churn', name:'Declining activity', condition:'devices > 0  AND  commands > 0  AND  last activity > 30 days ago', threshold:'30 days silent', why:'Was active, now gone dark. Still recoverable.'},
+  {cat:'churn', name:'Never enrolled', condition:'devices = 0  AND  has email OR company OR activity date', threshold:'0 devices, reachable', why:'Signed up but never set up the product. CS has a contact.'},
+  {cat:'churn', name:'Trial expiring <30 days', condition:'trial = TRUE  AND  0 < trial days left <= 30', threshold:'30 days remaining', why:'<3d = critical, <15d = high, <30d = mid churn risk.'},
+  {cat:'inactive', name:'Enrolled, never used', condition:'devices > 0  AND  commands = 0', threshold:'0 commands ever', why:'Product deployed, never touched. Purest inactivity signal.'},
+  {cat:'inactive', name:'Active but low commands', condition:'devices > 0  AND  commands > 0  AND  has activity  AND  cmd/device < 2', threshold:'< 2 cmd/device (your median)', why:'Below this = bottom 50% of your active base.'},
+  {cat:'inactive', name:'All devices low-priv', condition:'is device low priv = num of devices  (every device lacks system permissions)', threshold:'100% of devices low-priv', why:'Product installed but core features blocked. One CS call fixes this.'},
+  {cat:'inactive', name:'Single-device accounts', condition:'devices = 1  AND  trial ended 0–90d ago  AND  inactive 90+ days', threshold:'1 device · trial ended ≤90d · inactive ≥90d', why:'Stalled pilot after trial. Beyond 90 days excluded as unrecoverable.'},
+  {cat:'billing', name:'Large account on limited plan', condition:'devices >= 51  AND  limited = TRUE', threshold:'51 devices', why:'Large deployment capped by plan. Upsell opportunity.'},
+  {cat:'billing', name:'Negative credits', condition:'credits < 0', threshold:'credits < 0', why:'Billing anomaly — account over-consumed its allocation.'},
+  {cat:'billing', name:'Credits expiring 90 days', condition:'days left > 0  AND  days left <= 90  (formula: credits / devices where missing)', threshold:'90 days', why:'Renewal conversation window. Formula applied where days left is empty.'},
+  {cat:'billing', name:'Credits expiring 30 days', condition:'days left > 0  AND  days left <= 30', threshold:'30 days — urgent', why:'Imminent expiry. Escalate immediately.'},
+  {cat:'billing', name:'Renewal — expire <90 days', condition:'smart expire Date is future  AND  within 90 days', threshold:'90 days', why:'Smart licence expiring soon.'},
+  {cat:'billing', name:'Renewal — already expired', condition:'smart expire Date has passed  AND  expired within last 90 days', threshold:'expired 0-90 days ago', why:'Beyond 90 days excluded — considered unrecoverable.'},
+  {cat:'ops', name:'Uncontactable ghost', condition:'devices = 0  AND  no email  AND  no company  AND  no activity date', threshold:'all contact fields empty', why:'CS has nothing to call. Pass to data/ops team.'},
+  {cat:'ops', name:'Orphaned accounts', condition:'no admin email  AND  no company name  AND  no last activity date', threshold:'3 contact fields empty', why:'Unreachable — data quality issue.'},
+  {cat:'ops', name:'51+ no channel partner', condition:'devices >= 51  AND  channel partner field is empty', threshold:'51 devices', why:'Large account with no partner attribution. Sales ops gap.'},
+];
+const GUIDE_EXCLUSIONS = [
+  {name:'Ghana accounts', rule:'country = "Ghana"', reason:'Excluded from all counts and table.'},
+  {name:'"default" domains', rule:'domain name contains "default"', reason:'OEM shell/system accounts — not real customers.'},
+  {name:'OEM=undefined, inactive', rule:'OEM = undefined  AND  last activity is null or > 6 months ago', reason:'~10k system-generated accounts with no recent activity.'},
+  {name:'TL score — size-aware thresholds', rule:'Large (>500 dev): red if silent >=14d | Medium (101-500): red if silent >=30d | Small (1-100): red if silent >=90d', reason:'Traffic light uses stricter thresholds for larger accounts.'},
+];
+const GUIDE_PENDING = [
+  {name:'Dead account exclusion',
+   rule:'limited = TRUE  AND  last activity > 180 days ago',
+   reason:'Activate next week when last activity is populated for all 60k accounts. Uncomment the dead account rule line in processData().'},
+  {name:'Plan type split — filter upgrade',
+   rule:'Active base currently = devices > 0 AND commands > 0',
+   reason:'Once full last_activity data is available for all 60k accounts, update buildInsights() — replace the active_base filter with: last_activity within last 180 days. Search for "PLAN SPLIT PENDING" in the JS.'},
+];
+
+function renderGuide(){
+  const cats = {churn:'guide-churn', inactive:'guide-inactive', billing:'guide-billing', ops:'guide-ops'};
+  Object.values(cats).forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='';});
+  GUIDE_ALERTS.forEach(a=>{
+    const el=document.getElementById(cats[a.cat]);
+    if(!el)return;
+    el.innerHTML+=`<div style="display:grid;grid-template-columns:140px 1fr 200px;gap:10px;align-items:start;padding:.55rem .85rem;border-radius:8px;border:0.5px solid #e5e2db;background:#fff;font-size:11px">
+      <div style="font-weight:500;color:#111;line-height:1.5">${a.name}</div>
+      <div style="min-width:0"><div style="font-size:12px;background:#f2f1ed;padding:3px 8px;border-radius:3px;color:#333;font-family:monospace;line-height:1.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${a.condition}">${a.condition}</div><div style="margin-top:3px;color:#aaa;font-size:10px">${a.why}</div></div>
+      <div style="text-align:right"><span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:8px;padding:3px 8px;font-weight:500;white-space:normal;display:inline-block;text-align:right;line-height:1.5">Threshold: ${a.threshold}</span></div>
+    </div>`;
+  });
+  document.getElementById('guide-exclusions').innerHTML=GUIDE_EXCLUSIONS.map(e=>`<div style="display:grid;grid-template-columns:160px 1fr;gap:10px;align-items:start;padding:.55rem .85rem;border-radius:8px;border:0.5px solid #e5e2db;background:#f8f7f3;font-size:11px">
+    <div style="font-weight:500;color:#111">${e.name}</div>
+    <div><code style="font-size:10px;background:#f2f1ed;padding:1px 5px;border-radius:3px;color:#444;font-family:monospace">${e.rule}</code><div style="margin-top:4px;color:#aaa;font-size:10px">${e.reason}</div></div>
+  </div>`).join('');
+  document.getElementById('guide-pending').innerHTML=GUIDE_PENDING.map(e=>`<div style="display:grid;grid-template-columns:160px 1fr;gap:10px;align-items:start;padding:.55rem .85rem;border-radius:8px;border:1.5px solid #EEEDFE;background:#f9f9fe;font-size:11px">
+    <div style="font-weight:500;color:#3C3489">${e.name}</div>
+    <div><code style="font-size:10px;background:#EEEDFE;padding:1px 5px;border-radius:3px;color:#3C3489;font-family:monospace">${e.rule}</code><div style="margin-top:4px;color:#888;font-size:10px">${e.reason}</div></div>
+  </div>`).join('');
+}
+
+
+function filterTrialByCard(val){
+  // update dropdown to match
+  const sel = document.getElementById('tm-tl-filter');
+  if(val==='all') sel.value='all';
+  else if(val==='nodev') { sel.value='all'; }
+  else sel.value=val;
+  // highlight active card
+  document.querySelectorAll('.ts-clickable').forEach(c=>c.classList.remove('active'));
+  const cardId = val==='all'?'tmc-all':val==='nodev'?'tmc-nodev':'tmc-'+val;
+  const activeCard = document.getElementById(cardId);
+  if(activeCard) activeCard.classList.add('active');
+  // apply special filter for nodev
+  window._tmNodevFilter = val==='nodev';
+  trialPage=0;
+  renderTrialTable();
+}
+
+
+/* ═══ DATA CLEANSING TAB ═══ */
+let dcData=[], dcFiltered=[], dcActiveFilter=null, dcSortKey='dev', dcSortDir=-1, dcPage=0;
+const DC_PAGE=50;
+
+const DC_OPS_CARDS = [
+  {key:'ghost',      label:'Uncontactable ghost',      sub:'0 devices, no contact info',          priority:'high', why:'CS has nothing to call — pass to data team'},
+  {key:'orphaned',   label:'Orphaned accounts',         sub:'No email, company or activity',       priority:'high', why:'All 3 contact fields empty'},
+  {key:'large_no_cp',label:'51+ no channel partner',   sub:'Revenue unattributed',                priority:'med',  why:'Partner attribution gap for sales ops'},
+];
+
+const DC_QUALITY_CARDS = [
+  {key:'bad_email',  label:'Malformed email',           sub:'Email field has no @ sign',           priority:'high', why:'19,164 accounts — CS cannot email them'},
+  {key:'dup_domain', label:'Duplicate domains',         sub:'Domain appears more than once',       priority:'high', why:'Inflate counts — may indicate data entry errors'},
+  {key:'numeric_co', label:'Company = a number',        sub:'e.g. "1", "2" — not a real name',    priority:'med',  why:'Data entry error in source system'},
+  {key:'no_country', label:'Country missing',           sub:'Country is undefined or empty',       priority:'med',  why:'Limits geographic segmentation'},
+  {key:'huge_devs',  label:'Device count >100k',        sub:'Possibly OEM default or data error',  priority:'med',  why:'9 accounts — verify if real'},
+  {key:'old_account',label:'Account created >10 years', sub:'Likely legacy import or test account',priority:'low',  why:'3,346 accounts — audit for relevance'},
+];
+
+function buildDCData(data){
+  if(!document.getElementById("dc-cards-ops")) return;
+  // mark each account with its quality issues
+  const domCount={};
+  data.forEach(r=>{ domCount[r.d]=(domCount[r.d]||0)+1; });
+
+  dcData = data.map(r=>{
+    const issues=[];
+    // ops
+    if(r.f.includes('ghost'))      issues.push('ghost');
+    if(r.f.includes('orphaned'))   issues.push('orphaned');
+    if(r.f.includes('large_no_cp'))issues.push('large_no_cp');
+    // quality
+    if(r.email && !r.email.includes('@')) issues.push('bad_email');
+    if(domCount[r.d]>1)            issues.push('dup_domain');
+    if(r.co && /^\d+$/.test(r.co)) issues.push('numeric_co');
+    if(!r.ct || r.ct===''||r.ct.toLowerCase()==='undefined') issues.push('no_country');
+    if(r.dev>100000)               issues.push('huge_devs');
+    // can't easily check >10yr here — skip for now
+    if(issues.length===0) return null;
+    return {...r, dcIssues: issues};
+  }).filter(Boolean);
+
+  // count per card
+  const counts={};
+  [...DC_OPS_CARDS,...DC_QUALITY_CARDS].forEach(c=>counts[c.key]=0);
+  dcData.forEach(r=>r.dcIssues.forEach(i=>{ if(counts[i]!==undefined)counts[i]++; }));
+
+  // render ops cards
+  const cardHTML = c => `<div class="dc-card priority-${c.priority}" id="dcc-${c.key}" onclick="filterDC('${c.key}')"><span class="dc-priority dc-${c.priority}">${c.priority}</span><div class="dc-num">${(counts[c.key]||0).toLocaleString()}</div><div class="dc-label">${c.label}</div><div class="dc-sub">${c.sub}</div></div>`;
+  document.getElementById('dc-cards-ops').innerHTML = DC_OPS_CARDS.map(cardHTML).join('');
+  document.getElementById('dc-cards-quality').innerHTML = DC_QUALITY_CARDS.map(cardHTML).join('');
+
+  document.getElementById('dc-empty').style.display='none';
+  document.getElementById('dc-content').style.display='block';
+  dcActiveFilter=null; dcSortKey='dev'; dcSortDir=-1; dcPage=0;
+  applyDCFilters();
+}
+
+function filterDC(key){
+  document.querySelectorAll('.dc-card').forEach(c=>c.classList.remove('active'));
+  if(dcActiveFilter===key){ dcActiveFilter=null; }
+  else { dcActiveFilter=key; const el=document.getElementById('dcc-'+key); if(el)el.classList.add('active'); }
+  dcPage=0; applyDCFilters();
+}
+function clearDCFilter(){
+  dcActiveFilter=null;
+  document.getElementById('dc-search').value='';
+  document.querySelectorAll('.dc-card').forEach(c=>c.classList.remove('active'));
+  applyDCFilters();
+}
+function applyDCFilters(){
+  const q=(document.getElementById('dc-search')?.value||'').toLowerCase();
+  dcFiltered=dcData.filter(r=>{
+    if(dcActiveFilter && !r.dcIssues.includes(dcActiveFilter)) return false;
+    if(q && !(r.d+' '+r.co+' '+r.ct).toLowerCase().includes(q)) return false;
+    return true;
+  });
+  dcFiltered.sort((a,b)=>{
+    let av=a[dcSortKey],bv=b[dcSortKey];
+    if(av==null)av=dcSortDir>0?Infinity:-Infinity;
+    if(bv==null)bv=dcSortDir>0?Infinity:-Infinity;
+    return typeof av==='string'?dcSortDir*av.localeCompare(bv):dcSortDir*(av-bv);
+  });
+  const title=document.getElementById('dc-tbl-title');
+  const count=document.getElementById('dc-tbl-count');
+  const all=[...DC_OPS_CARDS,...DC_QUALITY_CARDS];
+  const active=all.find(c=>c.key===dcActiveFilter);
+  title.textContent=active?active.label:'All data issues';
+  count.textContent=`${dcFiltered.length.toLocaleString()} accounts`;
+  renderDCTable();
+}
+function sortDC(k){
+  if(dcSortKey===k)dcSortDir*=-1;else{dcSortKey=k;dcSortDir=-1;}
+  document.querySelectorAll('[id^="dc-s-"]').forEach(e=>{e.className='sarr';e.textContent='↕';});
+  const el=document.getElementById('dc-s-'+k);if(el){el.className='sarr on';el.textContent=dcSortDir>0?'↑':'↓';}
+  dcPage=0;applyDCFilters();
+}
+const ISSUE_LABELS={ghost:'Ghost',orphaned:'Orphaned',large_no_cp:'No partner',bad_email:'Bad email',dup_domain:'Duplicate',numeric_co:'Numeric co',no_country:'No country',huge_devs:'>100k devices',old_account:'>10yr old'};
+function renderDCTable(){
+  const slice=dcFiltered.slice(dcPage*DC_PAGE,dcPage*DC_PAGE+DC_PAGE);
+  document.getElementById('dc-body').innerHTML=slice.map(r=>{
+    const badges=`<div style="display:flex;flex-wrap:wrap;gap:3px">${r.dcIssues.map(i=>`<span style="font-size:9px;background:#fdecea;color:#a02828;border-radius:100px;padding:1px 6px;white-space:nowrap">${ISSUE_LABELS[i]||i}</span>`).join('')}</div>`;
+    const cr=r.cr==null?'<span class="muted">—</span>':(r.cr<0?`<span class="neg">${r.cr.toLocaleString()}</span>`:r.cr.toLocaleString());
+    return`<tr><td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.d}</td><td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.co||'<span class="muted">—</span>'}</td><td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.email||'<span class="muted">—</span>'}</td><td><span class="badge b-oem" style="overflow:hidden;text-overflow:ellipsis;max-width:70px;display:inline-block">${r.oem}</span></td><td>${r.dev.toLocaleString()}</td><td>${r.cmd.toLocaleString()}</td><td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.ct||'<span class="muted">—</span>'}</td><td>${r.la||'<span class="muted">—</span>'}</td><td style="white-space:normal">${badges}</td></tr>`;
+  }).join('');
+  const total=Math.ceil(dcFiltered.length/DC_PAGE)||1;
+  document.getElementById('dc-page-info').textContent=`Page ${dcPage+1} of ${total} (${dcFiltered.length.toLocaleString()} rows)`;
+  document.getElementById('dc-prev').disabled=dcPage===0;
+  document.getElementById('dc-next').disabled=dcPage>=total-1;
+}
+function changeDCPage(d){dcPage+=d;renderDCTable();}
+function renderCleansing(){
+  if(allData.length) buildDCData(allData);
+}
+
+
+/* ═══ INSIGHT SECTIONS ═══ */
+/*
+  PLAN SPLIT PENDING — activate when full last_activity is available:
+  Replace active_base filter from (dev>0 && cmd>0)
+  to: (last_activity within last 180 days)
+  Search for "PLAN SPLIT PENDING" in buildInsights() below.
+*/
+function buildInsights(data, oemFilter){
+  const empty = document.getElementById('insights-empty');
+  const el    = document.getElementById('insights-content');
+  if(!data || !data.length){ if(empty)empty.style.display=''; if(el)el.style.display='none'; return; }
+  if(empty) empty.style.display='none';
+  if(el)    el.style.display='block';
+
+  const d = (oemFilter && oemFilter!=='all') ? data.filter(r=>r.oem===oemFilter) : data;
+  const total = d.length;
+  if(!total) return;
+
+  // ── 1. ACTIVATION FUNNEL ──
+  const enrolled = d.filter(r=>r.dev>0).length;
+  const used     = d.filter(r=>r.cmd>0).length;
+  const active   = d.filter(r=>r.la).length;
+  const fEl = document.getElementById('ins-funnel');
+  if(fEl){
+    const steps=[
+      {label:'Total accounts',   n:total,    color:'#888780', note:''},
+      {label:'Devices enrolled', n:enrolled, color:'#378ADD', note:''},
+      {label:'Used product',     n:used,     color:'#185FA5', note:''},
+      {label:'Active last 36d',  n:active,   color:'#1D9E75', note:'Will improve once full last activity data is available'},
+    ];
+    fEl.innerHTML = steps.map(s=>{
+      const pct=Math.round(s.n/total*100);
+      return `<div class="funnel-row">
+        <div class="funnel-label">${s.label}${s.note?`<div style="font-size:9px;color:#bbb;font-style:italic;font-weight:400">${s.note}</div>`:''}</div>
+        <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:${pct}%;background:${s.color}">${pct>10?pct+'%':''}</div></div>
+        <div class="funnel-pct">${pct}%</div>
+        <div class="funnel-n">${s.n.toLocaleString()}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── 2. PLAN TYPE SPLIT (active accounts only) ──
+  // PLAN SPLIT PENDING: when full last_activity available, replace next line with:
+  // const ab = d.filter(r => r.daysSince !== null && r.daysSince <= 180);
+  const ab = d.filter(r=>r.dev>0 && r.cmd>0);
+  const abt = ab.length;
+  const ab_lim   = ab.filter(r=>r.lim).length;
+  const ab_full  = ab.filter(r=>!r.lim && !r.tr).length;
+  const ab_trial = ab.filter(r=>r.tr && r.trDays>0).length;
+  const pEl = document.getElementById('ins-plan');
+  if(pEl && abt){
+    const plans=[
+      {label:'Limited plan',  n:ab_lim,   pct:Math.round(ab_lim/abt*100),   color:'#EF9F27'},
+      {label:'Full plan',     n:ab_full,  pct:Math.round(ab_full/abt*100),  color:'#1D9E75'},
+      {label:'Active trials', n:ab_trial, pct:Math.round(ab_trial/abt*100), color:'#378ADD'},
+    ];
+    pEl.innerHTML=`<div style="font-size:11px;color:#aaa;margin-bottom:.5rem">
+      Based on <strong style="color:#555">${abt.toLocaleString()}</strong> active accounts (devices &gt; 0 and commands &gt; 0)
+      <span style="margin-left:6px;font-size:9px;font-style:italic">· filter will update when full last activity data is available</span>
+    </div>`+plans.map(p=>`<div class="plan-row">
+      <div class="plan-label">${p.label}</div>
+      <div class="plan-bar-wrap"><div class="plan-bar" style="width:${p.pct}%;background:${p.color}">${p.pct>8?p.pct+'%':''}</div></div>
+      <div class="plan-n">${p.n.toLocaleString()} <span style="color:#bbb">(${p.pct}%)</span></div>
+    </div>`).join('');
+  }
+
+  // ── 3. USAGE BY ACCOUNT SIZE ──
+  const sizes=[
+    {label:'1–10 dev',  lo:1,  hi:10},
+    {label:'11–50',     lo:11, hi:50},
+    {label:'51–200',    lo:51, hi:200},
+    {label:'201–500',   lo:201,hi:500},
+    {label:'500+ dev',  lo:501,hi:9999999},
+  ];
+  const sEl = document.getElementById('ins-size');
+  if(sEl){
+    sEl.innerHTML=sizes.map(s=>{
+      const bucket=d.filter(r=>r.dev>=s.lo&&r.dev<=s.hi);
+      const n=bucket.length; if(!n) return '';
+      const active_b=bucket.filter(r=>r.cmd>0);
+      const pct=Math.round(active_b.length/n*100);
+      const avg_cmd=active_b.length?Math.round(active_b.reduce((sum,r)=>sum+r.cmd,0)/active_b.length):0;
+      return `<div class="size-row">
+        <div class="size-label">${s.label}</div>
+        <div class="size-bar-wrap"><div class="size-bar" style="width:${pct}%"></div></div>
+        <div class="size-pct">${pct}%</div>
+        <div class="size-cmd">${avg_cmd.toLocaleString()} avg cmds</div>
+        <div style="font-size:10px;color:#ccc;width:65px;text-align:right;flex-shrink:0">${n.toLocaleString()} accts</div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── 4. LIMITED BUT ACTIVE — UPSELL TARGETS ──
+  const warm=d.filter(r=>r.dev>0&&r.cmd>0&&r.lim);
+  const uSizes=[
+    {label:'Micro',  sub:'1–10 devices',   lo:1,  hi:10},
+    {label:'Small',  sub:'11–50 devices',  lo:11, hi:50},
+    {label:'Mid',    sub:'51–200 devices', lo:51, hi:200},
+    {label:'Large',  sub:'201+ devices',   lo:201,hi:9999999},
+  ];
+  const uEl=document.getElementById('ins-upsell');
+  if(uEl){
+    uEl.innerHTML=uSizes.map(s=>{
+      const bucket=warm.filter(r=>r.dev>=s.lo&&r.dev<=s.hi);
+      const n=bucket.length;
+      const avg_cmd=n?Math.round(bucket.reduce((sum,r)=>sum+r.cmd,0)/n):0;
+      return `<div class="upsell-card">
+        <div class="upsell-num">${n.toLocaleString()}</div>
+        <div class="upsell-label">${s.label} <span style="font-weight:400;color:#aaa;font-size:10px">${s.sub}</span></div>
+        <div class="upsell-sub">avg ${avg_cmd.toLocaleString()} commands</div>
+      </div>`;
+    }).join('');
+  }
+}
+
+
+/* ═══ SUPABASE INTEGRATION ═══ */
+const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3000' : '';
+const STORAGE_KEY = 'cs_admin_token';
+
+let adminToken = localStorage.getItem(STORAGE_KEY) || null;
+let adminUser  = localStorage.getItem(STORAGE_KEY + '_user') || null;
+let isAdmin    = false;
+
+// ── Auth helpers ──
+async function checkAuth() {
+  if (!adminToken) { setViewerMode(); return; }
+  try {
+    const r = await fetch(API_BASE + '/api/verify', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ token: adminToken })
+    });
+    const d = await r.json();
+    if (d.valid) { isAdmin = true; adminUser = d.username; setAdminMode(); }
+    else { adminToken = null; localStorage.removeItem(STORAGE_KEY); setViewerMode(); }
+  } catch(e) { setViewerMode(); }
+}
+
+function setAdminMode() {
+  isAdmin = true;
+  document.getElementById('admin-bar').style.display = 'flex';
+  document.getElementById('admin-username').textContent = adminUser;
+  document.getElementById('dz-admin-content').style.display = 'block';
+  document.getElementById('dz-viewer-content').style.display = 'none';
+  document.getElementById('drop-zone').style.cursor = 'pointer';
+  const btn = document.getElementById('upload-btn');
+  if (btn) btn.style.display = '';
+}
+
+function setViewerMode() {
+  isAdmin = false;
+  document.getElementById('admin-bar').style.display = 'none';
+  document.getElementById('dz-admin-content').style.display = 'none';
+  const btn = document.getElementById('upload-btn');
+  if (btn) btn.style.display = 'none';
+  // Remove drop zone click for viewers
+  const dz = document.getElementById('drop-zone');
+  if (dz) { dz.style.cursor = 'default'; dz.onclick = null; }
+}
+
+function handleUploadClick() {
+  if (!isAdmin) { showLoginModal(); return; }
+  document.getElementById('file-input').click();
+}
+
+// ── Login modal ──
+function showLoginModal() {
+  document.getElementById('login-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('login-user').focus(), 100);
+}
+function closeLoginModal() {
+  document.getElementById('login-modal').style.display = 'none';
+  document.getElementById('login-error').style.display = 'none';
+  document.getElementById('login-pass').value = '';
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeLoginModal();
+  if (e.key === 'Enter' && document.getElementById('login-modal').style.display === 'flex') submitLogin();
+});
+
+async function submitLogin() {
+  const username = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-error');
+  if (!username || !password) { errEl.textContent = 'Please enter username and password'; errEl.style.display = ''; return; }
+
+  try {
+    const r = await fetch(API_BASE + '/api/login', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ username, password })
+    });
+    const d = await r.json();
+    if (d.token) {
+      adminToken = d.token;
+      adminUser  = d.username;
+      localStorage.setItem(STORAGE_KEY, adminToken);
+      localStorage.setItem(STORAGE_KEY + '_user', adminUser);
+      closeLoginModal();
+      setAdminMode();
+    } else {
+      errEl.textContent = d.error || 'Login failed';
+      errEl.style.display = '';
+      document.getElementById('login-pass').value = '';
+    }
+  } catch(e) {
+    errEl.textContent = 'Connection error — please try again';
+    errEl.style.display = '';
+  }
+}
+
+function adminLogout() {
+  adminToken = null; adminUser = null; isAdmin = false;
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(STORAGE_KEY + '_user');
+  setViewerMode();
+}
+
+// ── Supabase snapshot storage (replaces localStorage) ──
+async function loadSnaps() {
+  try {
+    const r = await fetch(API_BASE + '/api/snapshots');
+    const d = await r.json();
+    if (d.snapshots) {
+      snapshots = d.snapshots.map(s => s.data);
+      snapshots.sort((a,b) => a.date.localeCompare(b.date));
+    }
+  } catch(e) {
+    // Fallback to localStorage if API not available (local dev)
+    try { snapshots = JSON.parse(localStorage.getItem('cs_dash_v7') || '[]'); } catch(e2) { snapshots = []; }
+  }
+}
+
+async function saveSnaps() {
+  // Saving is now done via upload API — this is a no-op
+}
+
+async function saveSnapshotToServer(snap) {
+  if (!adminToken) return;
+  try {
+    const r = await fetch(API_BASE + '/api/upload', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + adminToken
+      },
+      body: JSON.stringify({ snapshot: snap })
+    });
+    const d = await r.json();
+    if (!d.success) console.error('Upload failed:', d.error);
+  } catch(e) {
+    console.error('Upload error:', e);
+  }
+}
+
+async function deleteSnap(i) {
+  const snap = snapshots[i];
+  if (!snap) return;
+  if (!isAdmin) { alert('Only admins can delete snapshots'); return; }
+
+  try {
+    await fetch(API_BASE + '/api/delete', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + adminToken
+      },
+      body: JSON.stringify({ date: snap.date })
+    });
+  } catch(e) { console.error('Delete error:', e); }
+
+  snapshots.splice(i, 1);
+  renderSnapsBar();
+  renderTrends();
+  const b = document.getElementById('snap-badge');
+  if (snapshots.length) { b.textContent = snapshots.length; b.style.display = ''; }
+  else b.style.display = 'none';
+}
+
+// ── Override snap deletion chip to check admin ──
+function renderSnapsBar() {
+  const bar = document.getElementById('snapshots-bar');
+  if (!snapshots.length) { bar.innerHTML = ''; return; }
+  bar.innerHTML = '<span class="snap-label">Snapshots:</span>' +
+    snapshots.map((s,i) => `<span class="snap-chip ${i===snapshots.length-1?'current':''}">📅 ${s.date}${isAdmin?`<span class="snap-x" onclick="deleteSnap(${i})">×</span>`:''}</span>`).join('');
+}
+
+</script>
+</html>
