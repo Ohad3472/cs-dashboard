@@ -1348,166 +1348,83 @@ function renderTrendLines(snaps,oemFilter){
 }
 
 /* ═══ SUPABASE INTEGRATION ═══ */
-const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3000' : '';
+const SUPA_URL = 'https://pkyngucjjcdukfhhqysh.supabase.co';
+const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBreW5ndWNqamNkdWtmaGhxeXNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1Njg3NjEsImV4cCI6MjA5NDE0NDc2MX0.r-mYmlOJ6__obtUAGV-2Ad92tA7Vu4jzImwrtwEKxKk';
 const STORAGE_KEY = 'cs_admin_token';
 
-let adminToken = null; try { adminToken = localStorage.getItem(STORAGE_KEY) || null; } catch(e) {}
-let adminUser = null; try { adminUser = localStorage.getItem(STORAGE_KEY + '_user') || null; } catch(e) {}
-let isAdmin    = false;
+let adminToken = null;
+let adminUser = null;
+let isAdmin = false;
 
-// ── Auth helpers ──
-async function checkAuth() {
-  if (!adminToken) { setViewerMode(); return; }
-  try {
-    const r = await fetch(API_BASE + '/api/verify', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ token: adminToken })
-    });
-    const d = await r.json();
-    if (d.valid) { isAdmin = true; adminUser = d.username; setAdminMode(); }
-    else { adminToken = null; localStorage.removeItem(STORAGE_KEY); setViewerMode(); }
-  } catch(e) { setViewerMode(); }
+try { adminToken = localStorage.getItem(STORAGE_KEY) || null; } catch(e) {}
+try { adminUser = localStorage.getItem(STORAGE_KEY + '_user') || null; } catch(e) {}
+
+function supaHeaders() {
+  return {
+    'apikey': SUPA_ANON,
+    'Authorization': 'Bearer ' + SUPA_ANON,
+    'Content-Type': 'application/json'
+  };
 }
 
-function setAdminMode() {
-  isAdmin = true;
-  const adminBar = document.getElementById('admin-bar');
-  if(adminBar) { adminBar.style.display = 'flex'; }
-  const adminUsername = document.getElementById('admin-username');
-  if(adminUsername) adminUsername.textContent = adminUser;
-  const dzAdmin = document.getElementById('dz-admin-content');
-  if(dzAdmin) dzAdmin.style.display = 'block';
-  const dzViewer = document.getElementById('dz-viewer-content');
-  if(dzViewer) dzViewer.style.display = 'none';
-  const dz = document.getElementById('drop-zone');
-  if(dz) { dz.style.cursor = 'pointer'; dz.onclick = () => document.getElementById('file-input').click(); }
-  const btn = document.getElementById('upload-btn');
-  if(btn) btn.style.display = '';
-}
-
-function setViewerMode() {
-  isAdmin = false;
-  document.getElementById('admin-bar').style.display = 'none';
-  document.getElementById('dz-admin-content').style.display = 'none';
-  const btn = document.getElementById('upload-btn');
-  if (btn) btn.style.display = 'none';
-  // Remove drop zone click for viewers
-  const dz = document.getElementById('drop-zone');
-  if (dz) { dz.style.cursor = 'default'; dz.onclick = null; }
-}
-
-function handleUploadClick() {
-  if (!isAdmin) { showLoginModal(); return; }
-  document.getElementById('file-input').click();
-}
-
-// ── Login modal ──
-function showLoginModal() {
-  document.getElementById('login-modal').style.display = 'flex';
-  setTimeout(() => document.getElementById('login-user').focus(), 100);
-}
-function closeLoginModal() {
-  document.getElementById('login-modal').style.display = 'none';
-  document.getElementById('login-error').style.display = 'none';
-  document.getElementById('login-pass').value = '';
-}
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeLoginModal();
-  if (e.key === 'Enter' && document.getElementById('login-modal').style.display === 'flex') submitLogin();
-});
-
-async function submitLogin() {
-  const username = document.getElementById('login-user').value.trim();
-  const password = document.getElementById('login-pass').value;
-  const errEl = document.getElementById('login-error');
-  if (!username || !password) { errEl.textContent = 'Please enter username and password'; errEl.style.display = ''; return; }
-
-  try {
-    const r = await fetch(API_BASE + '/api/login', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ username, password })
-    });
-    const d = await r.json();
-    if (d.token) {
-      adminToken = d.token;
-      adminUser  = d.username;
-      localStorage.setItem(STORAGE_KEY, adminToken);
-      localStorage.setItem(STORAGE_KEY + '_user', adminUser);
-      closeLoginModal();
-      setAdminMode();
-    } else {
-      errEl.textContent = d.error || 'Login failed';
-      errEl.style.display = '';
-      document.getElementById('login-pass').value = '';
-    }
-  } catch(e) {
-    errEl.textContent = 'Connection error — please try again';
-    errEl.style.display = '';
-  }
-}
-
-function adminLogout() {
-  adminToken = null; adminUser = null; isAdmin = false;
-  localStorage.removeItem(STORAGE_KEY);
-  localStorage.removeItem(STORAGE_KEY + '_user');
-  setViewerMode();
-}
-
-// ── Supabase snapshot storage (replaces localStorage) ──
 async function loadSnaps() {
   try {
-    const r = await fetch(API_BASE + '/api/snapshots');
-    const d = await r.json();
-    if (d.snapshots) {
-      snapshots = d.snapshots.map(s => s.data);
-      snapshots.sort((a,b) => a.date.localeCompare(b.date));
+    const res = await fetch(SUPA_URL + '/rest/v1/snapshots?select=report_date,filename,uploaded_by,uploaded_at,data&order=report_date.asc', {
+      headers: supaHeaders()
+    });
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      snapshots = data.map(s => s.data).filter(Boolean);
+      console.log('Loaded', snapshots.length, 'snapshots from Supabase');
+    } else {
+      console.error('Unexpected response:', data);
+      snapshots = [];
     }
   } catch(e) {
-    // Fallback to localStorage if API not available (local dev)
-    try { snapshots = JSON.parse(localStorage.getItem('cs_dash_v7') || '[]'); } catch(e2) { snapshots = []; }
+    console.error('Load error:', e);
+    snapshots = [];
   }
 }
 
-async function saveSnaps() {
-  // Saving is now done via upload API — this is a no-op
-}
+function saveSnaps() {} // no-op
 
 async function saveSnapshotToServer(snap) {
-  if (!adminToken) return;
+  if (!isAdmin) return;
   try {
-    const r = await fetch(API_BASE + '/api/upload', {
+    const res = await fetch(SUPA_URL + '/rest/v1/snapshots', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + adminToken
+        ...supaHeaders(),
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
       },
-      body: JSON.stringify({ snapshot: snap })
+      body: JSON.stringify({
+        report_date: snap.date,
+        filename: snap.filename,
+        uploaded_by: adminUser || 'admin',
+        uploaded_at: new Date().toISOString(),
+        data: snap
+      })
     });
-    const d = await r.json();
-    if (!d.success) console.error('Upload failed:', d.error);
+    if (res.ok) {
+      console.log('✓ Saved to Supabase:', snap.date);
+    } else {
+      const t = await res.text();
+      console.error('Save failed:', res.status, t);
+    }
   } catch(e) {
-    console.error('Upload error:', e);
+    console.error('Save error:', e);
   }
 }
 
 async function deleteSnap(i) {
   const snap = snapshots[i];
-  if (!snap) return;
-  if (!isAdmin) { alert('Only admins can delete snapshots'); return; }
-
+  if (!snap || !isAdmin) return;
   try {
-    await fetch(API_BASE + '/api/delete', {
+    await fetch(SUPA_URL + '/rest/v1/snapshots?report_date=eq.' + snap.date, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + adminToken
-      },
-      body: JSON.stringify({ date: snap.date })
+      headers: supaHeaders()
     });
   } catch(e) { console.error('Delete error:', e); }
-
   snapshots.splice(i, 1);
   renderSnapsBar();
   renderTrends();
@@ -1516,361 +1433,170 @@ async function deleteSnap(i) {
   else b.style.display = 'none';
 }
 
-// ── Override snap deletion chip to check admin ──
 function renderSnapsBar() {
   const bar = document.getElementById('snapshots-bar');
+  if (!bar) return;
   if (!snapshots.length) { bar.innerHTML = ''; return; }
   bar.innerHTML = '<span class="snap-label">Snapshots:</span>' +
     snapshots.map((s,i) => `<span class="snap-chip ${i===snapshots.length-1?'current':''}">📅 ${s.date}${isAdmin?`<span class="snap-x" onclick="deleteSnap(${i})">×</span>`:''}</span>`).join('');
 }
 
+async function checkAuth() {
+  if (!adminToken) { setViewerMode(); return; }
+  try {
+    const decoded = atob(adminToken);
+    const parts = decoded.split(':');
+    if (parts.length !== 3) { setViewerMode(); return; }
+    const ts = parseInt(parts[1]);
+    if (Date.now() - ts > 24 * 60 * 60 * 1000) {
+      adminToken = null;
+      try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+      setViewerMode(); return;
+    }
+    adminUser = parts[0];
+    isAdmin = true;
+    setAdminMode();
+  } catch(e) { setViewerMode(); }
+}
+
+function setAdminMode() {
+  isAdmin = true;
+  const bar = document.getElementById('admin-bar');
+  if (bar) bar.style.display = 'flex';
+  const un = document.getElementById('admin-username');
+  if (un) un.textContent = adminUser;
+  const dzAdmin = document.getElementById('dz-admin-content');
+  if (dzAdmin) dzAdmin.style.display = 'block';
+  const dzViewer = document.getElementById('dz-viewer-content');
+  if (dzViewer) dzViewer.style.display = 'none';
+  const dz = document.getElementById('drop-zone');
+  if (dz) { dz.style.cursor = 'pointer'; dz.onclick = () => document.getElementById('file-input')?.click(); }
+  const btn = document.getElementById('upload-btn');
+  if (btn) btn.style.display = '';
+}
+
+function setViewerMode() {
+  isAdmin = false;
+  const bar = document.getElementById('admin-bar');
+  if (bar) bar.style.display = 'none';
+  const dzAdmin = document.getElementById('dz-admin-content');
+  if (dzAdmin) dzAdmin.style.display = 'none';
+  const dz = document.getElementById('drop-zone');
+  if (dz) { dz.style.cursor = 'default'; dz.onclick = null; }
+  const btn = document.getElementById('upload-btn');
+  if (btn) btn.style.display = 'none';
+}
+
+function handleUploadClick() {
+  if (!isAdmin) { showLoginModal(); return; }
+  document.getElementById('file-input')?.click();
+}
+
+function showLoginModal() {
+  const m = document.getElementById('login-modal');
+  if (m) { m.style.display = 'flex'; setTimeout(() => document.getElementById('login-user')?.focus(), 100); }
+}
+
+function closeLoginModal() {
+  const m = document.getElementById('login-modal');
+  if (m) m.style.display = 'none';
+  const e = document.getElementById('login-error');
+  if (e) e.style.display = 'none';
+  const p = document.getElementById('login-pass');
+  if (p) p.value = '';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeLoginModal();
+  if (e.key === 'Enter' && document.getElementById('login-modal')?.style.display === 'flex') submitLogin();
+});
+
+async function submitLogin() {
+  const username = document.getElementById('login-user')?.value.trim();
+  const password = document.getElementById('login-pass')?.value;
+  const errEl = document.getElementById('login-error');
+  if (!username || !password) {
+    if (errEl) { errEl.textContent = 'Please enter username and password'; errEl.style.display = ''; }
+    return;
+  }
+  const SALT = 'cs-dashboard-salt-2026';
+  const msgBuffer = new TextEncoder().encode(password + SALT);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashed = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2,'0')).join('');
+  try {
+    const res = await fetch(SUPA_URL + '/rest/v1/admins?select=id,username&username=eq.' + encodeURIComponent(username.toLowerCase()) + '&password_hash=eq.' + hashed, {
+      headers: supaHeaders()
+    });
+    const data = await res.json();
+    if (!data || !data.length) {
+      if (errEl) { errEl.textContent = 'Invalid username or password'; errEl.style.display = ''; }
+      if (document.getElementById('login-pass')) document.getElementById('login-pass').value = '';
+      return;
+    }
+    const ts = Date.now();
+    const token = btoa(data[0].username + ':' + ts + ':ok');
+    adminToken = token;
+    adminUser = data[0].username;
+    try { localStorage.setItem(STORAGE_KEY, token); localStorage.setItem(STORAGE_KEY + '_user', adminUser); } catch(e) {}
+    closeLoginModal();
+    setAdminMode();
+  } catch(e) {
+    if (errEl) { errEl.textContent = 'Connection error — please try again'; errEl.style.display = ''; }
+  }
+}
+
+function adminLogout() {
+  adminToken = null; adminUser = null; isAdmin = false;
+  try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(STORAGE_KEY + '_user'); } catch(e) {}
+  setViewerMode();
+}
 
 
 /* ═══ INIT ═══ */
-// Load data from Supabase on page load
 (async function(){
   await checkAuth();
   await loadSnaps();
   renderSnapsBar();
 
-  if(snapshots.length){
-    const b=document.getElementById('snap-badge');
-    b.textContent=snapshots.length;
-    b.style.display='';
+  if (snapshots.length) {
+    const b = document.getElementById('snap-badge');
+    if (b) { b.textContent = snapshots.length; b.style.display = ''; }
     populateTrendFilters();
 
-    // Load the latest snapshot data into the dashboard for all users (admin + viewer)
-    const latest = snapshots[snapshots.length-1];
-    if(latest && latest.accounts){
-      // If snapshot has full account data, use it
+    // Load latest snapshot data into dashboard
+    const latest = snapshots[snapshots.length - 1];
+    if (latest && latest.accounts && latest.accounts.length) {
       allData = latest.accounts;
-      trialData = allData.filter(r=>r.tr && r.trDays!==null && r.trDays>0);
-      document.getElementById('main-dashboard').style.display='block';
-      document.getElementById('trial-empty').style.display='none';
-      document.getElementById('trial-content').style.display='block';
+      trialData = allData.filter(r => r.tr && r.trDays !== null && r.trDays > 0);
+      document.getElementById('main-dashboard').style.display = 'block';
+      document.getElementById('trial-empty').style.display = 'none';
+      document.getElementById('trial-content').style.display = 'block';
+      document.getElementById('page-sub').textContent = allData.length.toLocaleString() + ' accounts (Ghana excluded) · ' + latest.filename + ' · ' + latest.date;
       applyFilters();
       renderTrialTable();
-      buildInsights(allData,'all');
-      const tb=document.getElementById('trial-badge');
-      if(tb){tb.textContent=trialData.length;tb.style.display='';}
+      buildInsights(allData, 'all');
+      renderTrends();
+      const tb = document.getElementById('trial-badge');
+      if (tb) { tb.textContent = trialData.length; tb.style.display = ''; }
+
+      // Update drop zone to show loaded state
+      const dz = document.getElementById('drop-zone');
+      if (dz && isAdmin) {
+        dz.classList.add('loaded');
+        dz.innerHTML = `<div class="dz-loaded">✓ ${latest.filename} (${latest.date}) — ${allData.length.toLocaleString()} accounts · Ghana excluded &nbsp;·&nbsp; <span style="cursor:pointer;text-decoration:underline;color:#0F6E56" onclick="document.getElementById('file-input').click()">Load another</span></div><input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFile(this.files[0])" style="display:none">`;
+      }
     }
   }
 
-  // Update drop zone status message for viewers
-  if(!isAdmin){
+  // Update viewer status message
+  if (!isAdmin) {
     const statusMsg = document.getElementById('dz-status-msg');
-    if(statusMsg) statusMsg.textContent = snapshots.length
-      ? `✓ ${snapshots[snapshots.length-1].date} — ${(snapshots[snapshots.length-1].total||0).toLocaleString()} accounts loaded`
-      : 'No data uploaded yet';
+    if (statusMsg) {
+      statusMsg.textContent = snapshots.length
+        ? '✓ ' + snapshots[snapshots.length-1].date + ' — ' + (snapshots[snapshots.length-1].total||0).toLocaleString() + ' accounts loaded'
+        : 'No data uploaded yet';
+    }
   }
 })();
 
-const GUIDE_ALERTS = [
-  {cat:'churn', name:'Stale large accounts', condition:'devices >= 51  AND  no last activity date', threshold:'51 devices', why:'Large accounts gone completely silent. Highest-value churn risk.'},
-  {cat:'churn', name:'Declining activity', condition:'devices > 0  AND  commands > 0  AND  last activity > 30 days ago', threshold:'30 days silent', why:'Was active, now gone dark. Still recoverable.'},
-  {cat:'churn', name:'Never enrolled', condition:'devices = 0  AND  has email OR company OR activity date', threshold:'0 devices, reachable', why:'Signed up but never set up the product. CS has a contact.'},
-  {cat:'churn', name:'Trial expiring <30 days', condition:'trial = TRUE  AND  0 < trial days left <= 30', threshold:'30 days remaining', why:'<3d = critical, <15d = high, <30d = mid churn risk.'},
-  {cat:'inactive', name:'Enrolled, never used', condition:'devices > 0  AND  commands = 0', threshold:'0 commands ever', why:'Product deployed, never touched. Purest inactivity signal.'},
-  {cat:'inactive', name:'Active but low commands', condition:'devices > 0  AND  commands > 0  AND  has activity  AND  cmd/device < 2', threshold:'< 2 cmd/device (your median)', why:'Below this = bottom 50% of your active base.'},
-  {cat:'inactive', name:'All devices low-priv', condition:'is device low priv = num of devices  (every device lacks system permissions)', threshold:'100% of devices low-priv', why:'Product installed but core features blocked. One CS call fixes this.'},
-  {cat:'inactive', name:'Single-device accounts', condition:'devices = 1  AND  trial ended 0–90d ago  AND  inactive 90+ days', threshold:'1 device · trial ended ≤90d · inactive ≥90d', why:'Stalled pilot after trial. Beyond 90 days excluded as unrecoverable.'},
-  {cat:'billing', name:'Large account on limited plan', condition:'devices >= 51  AND  limited = TRUE', threshold:'51 devices', why:'Large deployment capped by plan. Upsell opportunity.'},
-  {cat:'billing', name:'Negative credits', condition:'credits < 0', threshold:'credits < 0', why:'Billing anomaly — account over-consumed its allocation.'},
-  {cat:'billing', name:'Credits expiring 90 days', condition:'days left > 0  AND  days left <= 90  (formula: credits / devices where missing)', threshold:'90 days', why:'Renewal conversation window. Formula applied where days left is empty.'},
-  {cat:'billing', name:'Credits expiring 30 days', condition:'days left > 0  AND  days left <= 30', threshold:'30 days — urgent', why:'Imminent expiry. Escalate immediately.'},
-  {cat:'billing', name:'Renewal — expire <90 days', condition:'smart expire Date is future  AND  within 90 days', threshold:'90 days', why:'Smart licence expiring soon.'},
-  {cat:'billing', name:'Renewal — already expired', condition:'smart expire Date has passed  AND  expired within last 90 days', threshold:'expired 0-90 days ago', why:'Beyond 90 days excluded — considered unrecoverable.'},
-  {cat:'ops', name:'Uncontactable ghost', condition:'devices = 0  AND  no email  AND  no company  AND  no activity date', threshold:'all contact fields empty', why:'CS has nothing to call. Pass to data/ops team.'},
-  {cat:'ops', name:'Orphaned accounts', condition:'no admin email  AND  no company name  AND  no last activity date', threshold:'3 contact fields empty', why:'Unreachable — data quality issue.'},
-  {cat:'ops', name:'51+ no channel partner', condition:'devices >= 51  AND  channel partner field is empty', threshold:'51 devices', why:'Large account with no partner attribution. Sales ops gap.'},
-];
-const GUIDE_EXCLUSIONS = [
-  {name:'Ghana accounts', rule:'country = "Ghana"', reason:'Excluded from all counts and table.'},
-  {name:'"default" domains', rule:'domain name contains "default"', reason:'OEM shell/system accounts — not real customers.'},
-  {name:'OEM=undefined, inactive', rule:'OEM = undefined  AND  last activity is null or > 6 months ago', reason:'~10k system-generated accounts with no recent activity.'},
-  {name:'TL score — size-aware thresholds', rule:'Large (>500 dev): red if silent >=14d | Medium (101-500): red if silent >=30d | Small (1-100): red if silent >=90d', reason:'Traffic light uses stricter thresholds for larger accounts.'},
-];
-const GUIDE_PENDING = [
-  {name:'Dead account exclusion',
-   rule:'limited = TRUE  AND  last activity > 180 days ago',
-   reason:'Activate next week when last activity is populated for all 60k accounts. Uncomment the dead account rule line in processData().'},
-  {name:'Plan type split — filter upgrade',
-   rule:'Active base currently = devices > 0 AND commands > 0',
-   reason:'Once full last_activity data is available for all 60k accounts, update buildInsights() — replace the active_base filter with: last_activity within last 180 days. Search for "PLAN SPLIT PENDING" in the JS.'},
-];
-
-function renderGuide(){
-  const cats = {churn:'guide-churn', inactive:'guide-inactive', billing:'guide-billing', ops:'guide-ops'};
-  Object.values(cats).forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='';});
-  GUIDE_ALERTS.forEach(a=>{
-    const el=document.getElementById(cats[a.cat]);
-    if(!el)return;
-    el.innerHTML+=`<div style="display:grid;grid-template-columns:140px 1fr 200px;gap:10px;align-items:start;padding:.55rem .85rem;border-radius:8px;border:0.5px solid #e5e2db;background:#fff;font-size:11px">
-      <div style="font-weight:500;color:#111;line-height:1.5">${a.name}</div>
-      <div style="min-width:0"><div style="font-size:12px;background:#f2f1ed;padding:3px 8px;border-radius:3px;color:#333;font-family:monospace;line-height:1.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${a.condition}">${a.condition}</div><div style="margin-top:3px;color:#aaa;font-size:10px">${a.why}</div></div>
-      <div style="text-align:right"><span style="font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:8px;padding:3px 8px;font-weight:500;white-space:normal;display:inline-block;text-align:right;line-height:1.5">Threshold: ${a.threshold}</span></div>
-    </div>`;
-  });
-  document.getElementById('guide-exclusions').innerHTML=GUIDE_EXCLUSIONS.map(e=>`<div style="display:grid;grid-template-columns:160px 1fr;gap:10px;align-items:start;padding:.55rem .85rem;border-radius:8px;border:0.5px solid #e5e2db;background:#f8f7f3;font-size:11px">
-    <div style="font-weight:500;color:#111">${e.name}</div>
-    <div><code style="font-size:10px;background:#f2f1ed;padding:1px 5px;border-radius:3px;color:#444;font-family:monospace">${e.rule}</code><div style="margin-top:4px;color:#aaa;font-size:10px">${e.reason}</div></div>
-  </div>`).join('');
-  document.getElementById('guide-pending').innerHTML=GUIDE_PENDING.map(e=>`<div style="display:grid;grid-template-columns:160px 1fr;gap:10px;align-items:start;padding:.55rem .85rem;border-radius:8px;border:1.5px solid #EEEDFE;background:#f9f9fe;font-size:11px">
-    <div style="font-weight:500;color:#3C3489">${e.name}</div>
-    <div><code style="font-size:10px;background:#EEEDFE;padding:1px 5px;border-radius:3px;color:#3C3489;font-family:monospace">${e.rule}</code><div style="margin-top:4px;color:#888;font-size:10px">${e.reason}</div></div>
-  </div>`).join('');
-}
-
-
-function filterTrialByCard(val){
-  // update dropdown to match
-  const sel = document.getElementById('tm-tl-filter');
-  if(val==='all') sel.value='all';
-  else if(val==='nodev') { sel.value='all'; }
-  else sel.value=val;
-  // highlight active card
-  document.querySelectorAll('.ts-clickable').forEach(c=>c.classList.remove('active'));
-  const cardId = val==='all'?'tmc-all':val==='nodev'?'tmc-nodev':'tmc-'+val;
-  const activeCard = document.getElementById(cardId);
-  if(activeCard) activeCard.classList.add('active');
-  // apply special filter for nodev
-  window._tmNodevFilter = val==='nodev';
-  trialPage=0;
-  renderTrialTable();
-}
-
-
-/* ═══ DATA CLEANSING TAB ═══ */
-let dcData=[], dcFiltered=[], dcActiveFilter=null, dcSortKey='dev', dcSortDir=-1, dcPage=0;
-const DC_PAGE=50;
-
-const DC_OPS_CARDS = [
-  {key:'ghost',      label:'Uncontactable ghost',      sub:'0 devices, no contact info',          priority:'high', why:'CS has nothing to call — pass to data team'},
-  {key:'orphaned',   label:'Orphaned accounts',         sub:'No email, company or activity',       priority:'high', why:'All 3 contact fields empty'},
-  {key:'large_no_cp',label:'51+ no channel partner',   sub:'Revenue unattributed',                priority:'med',  why:'Partner attribution gap for sales ops'},
-];
-
-const DC_QUALITY_CARDS = [
-  {key:'bad_email',  label:'Malformed email',           sub:'Email field has no @ sign',           priority:'high', why:'19,164 accounts — CS cannot email them'},
-  {key:'dup_domain', label:'Duplicate domains',         sub:'Domain appears more than once',       priority:'high', why:'Inflate counts — may indicate data entry errors'},
-  {key:'numeric_co', label:'Company = a number',        sub:'e.g. "1", "2" — not a real name',    priority:'med',  why:'Data entry error in source system'},
-  {key:'no_country', label:'Country missing',           sub:'Country is undefined or empty',       priority:'med',  why:'Limits geographic segmentation'},
-  {key:'huge_devs',  label:'Device count >100k',        sub:'Possibly OEM default or data error',  priority:'med',  why:'9 accounts — verify if real'},
-  {key:'old_account',label:'Account created >10 years', sub:'Likely legacy import or test account',priority:'low',  why:'3,346 accounts — audit for relevance'},
-];
-
-function buildDCData(data){
-  if(!document.getElementById("dc-cards-ops")) return;
-  // mark each account with its quality issues
-  const domCount={};
-  data.forEach(r=>{ domCount[r.d]=(domCount[r.d]||0)+1; });
-
-  dcData = data.map(r=>{
-    const issues=[];
-    // ops
-    if(r.f.includes('ghost'))      issues.push('ghost');
-    if(r.f.includes('orphaned'))   issues.push('orphaned');
-    if(r.f.includes('large_no_cp'))issues.push('large_no_cp');
-    // quality
-    if(r.email && !r.email.includes('@')) issues.push('bad_email');
-    if(domCount[r.d]>1)            issues.push('dup_domain');
-    if(r.co && /^\d+$/.test(r.co)) issues.push('numeric_co');
-    if(!r.ct || r.ct===''||r.ct.toLowerCase()==='undefined') issues.push('no_country');
-    if(r.dev>100000)               issues.push('huge_devs');
-    // can't easily check >10yr here — skip for now
-    if(issues.length===0) return null;
-    return {...r, dcIssues: issues};
-  }).filter(Boolean);
-
-  // count per card
-  const counts={};
-  [...DC_OPS_CARDS,...DC_QUALITY_CARDS].forEach(c=>counts[c.key]=0);
-  dcData.forEach(r=>r.dcIssues.forEach(i=>{ if(counts[i]!==undefined)counts[i]++; }));
-
-  // render ops cards
-  const cardHTML = c => `<div class="dc-card priority-${c.priority}" id="dcc-${c.key}" onclick="filterDC('${c.key}')"><span class="dc-priority dc-${c.priority}">${c.priority}</span><div class="dc-num">${(counts[c.key]||0).toLocaleString()}</div><div class="dc-label">${c.label}</div><div class="dc-sub">${c.sub}</div></div>`;
-  document.getElementById('dc-cards-ops').innerHTML = DC_OPS_CARDS.map(cardHTML).join('');
-  document.getElementById('dc-cards-quality').innerHTML = DC_QUALITY_CARDS.map(cardHTML).join('');
-
-  document.getElementById('dc-empty').style.display='none';
-  document.getElementById('dc-content').style.display='block';
-  dcActiveFilter=null; dcSortKey='dev'; dcSortDir=-1; dcPage=0;
-  applyDCFilters();
-}
-
-function filterDC(key){
-  document.querySelectorAll('.dc-card').forEach(c=>c.classList.remove('active'));
-  if(dcActiveFilter===key){ dcActiveFilter=null; }
-  else { dcActiveFilter=key; const el=document.getElementById('dcc-'+key); if(el)el.classList.add('active'); }
-  dcPage=0; applyDCFilters();
-}
-function clearDCFilter(){
-  dcActiveFilter=null;
-  document.getElementById('dc-search').value='';
-  document.querySelectorAll('.dc-card').forEach(c=>c.classList.remove('active'));
-  applyDCFilters();
-}
-function applyDCFilters(){
-  const q=(document.getElementById('dc-search')?.value||'').toLowerCase();
-  dcFiltered=dcData.filter(r=>{
-    if(dcActiveFilter && !r.dcIssues.includes(dcActiveFilter)) return false;
-    if(q && !(r.d+' '+r.co+' '+r.ct).toLowerCase().includes(q)) return false;
-    return true;
-  });
-  dcFiltered.sort((a,b)=>{
-    let av=a[dcSortKey],bv=b[dcSortKey];
-    if(av==null)av=dcSortDir>0?Infinity:-Infinity;
-    if(bv==null)bv=dcSortDir>0?Infinity:-Infinity;
-    return typeof av==='string'?dcSortDir*av.localeCompare(bv):dcSortDir*(av-bv);
-  });
-  const title=document.getElementById('dc-tbl-title');
-  const count=document.getElementById('dc-tbl-count');
-  const all=[...DC_OPS_CARDS,...DC_QUALITY_CARDS];
-  const active=all.find(c=>c.key===dcActiveFilter);
-  title.textContent=active?active.label:'All data issues';
-  count.textContent=`${dcFiltered.length.toLocaleString()} accounts`;
-  renderDCTable();
-}
-function sortDC(k){
-  if(dcSortKey===k)dcSortDir*=-1;else{dcSortKey=k;dcSortDir=-1;}
-  document.querySelectorAll('[id^="dc-s-"]').forEach(e=>{e.className='sarr';e.textContent='↕';});
-  const el=document.getElementById('dc-s-'+k);if(el){el.className='sarr on';el.textContent=dcSortDir>0?'↑':'↓';}
-  dcPage=0;applyDCFilters();
-}
-const ISSUE_LABELS={ghost:'Ghost',orphaned:'Orphaned',large_no_cp:'No partner',bad_email:'Bad email',dup_domain:'Duplicate',numeric_co:'Numeric co',no_country:'No country',huge_devs:'>100k devices',old_account:'>10yr old'};
-function renderDCTable(){
-  const slice=dcFiltered.slice(dcPage*DC_PAGE,dcPage*DC_PAGE+DC_PAGE);
-  document.getElementById('dc-body').innerHTML=slice.map(r=>{
-    const badges=`<div style="display:flex;flex-wrap:wrap;gap:3px">${r.dcIssues.map(i=>`<span style="font-size:9px;background:#fdecea;color:#a02828;border-radius:100px;padding:1px 6px;white-space:nowrap">${ISSUE_LABELS[i]||i}</span>`).join('')}</div>`;
-    const cr=r.cr==null?'<span class="muted">—</span>':(r.cr<0?`<span class="neg">${r.cr.toLocaleString()}</span>`:r.cr.toLocaleString());
-    return`<tr><td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.d}</td><td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.co||'<span class="muted">—</span>'}</td><td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.email||'<span class="muted">—</span>'}</td><td><span class="badge b-oem" style="overflow:hidden;text-overflow:ellipsis;max-width:70px;display:inline-block">${r.oem}</span></td><td>${r.dev.toLocaleString()}</td><td>${r.cmd.toLocaleString()}</td><td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.ct||'<span class="muted">—</span>'}</td><td>${r.la||'<span class="muted">—</span>'}</td><td style="white-space:normal">${badges}</td></tr>`;
-  }).join('');
-  const total=Math.ceil(dcFiltered.length/DC_PAGE)||1;
-  document.getElementById('dc-page-info').textContent=`Page ${dcPage+1} of ${total} (${dcFiltered.length.toLocaleString()} rows)`;
-  document.getElementById('dc-prev').disabled=dcPage===0;
-  document.getElementById('dc-next').disabled=dcPage>=total-1;
-}
-function changeDCPage(d){dcPage+=d;renderDCTable();}
-function renderCleansing(){
-  if(allData.length) buildDCData(allData);
-}
-
-
-/* ═══ INSIGHT SECTIONS ═══ */
-/*
-  PLAN SPLIT PENDING — activate when full last_activity is available:
-  Replace active_base filter from (dev>0 && cmd>0)
-  to: (last_activity within last 180 days)
-  Search for "PLAN SPLIT PENDING" in buildInsights() below.
-*/
-function buildInsights(data, oemFilter){
-  const empty = document.getElementById('insights-empty');
-  const el    = document.getElementById('insights-content');
-  if(!data || !data.length){ if(empty)empty.style.display=''; if(el)el.style.display='none'; return; }
-  if(empty) empty.style.display='none';
-  if(el)    el.style.display='block';
-
-  const d = (oemFilter && oemFilter!=='all') ? data.filter(r=>r.oem===oemFilter) : data;
-  const total = d.length;
-  if(!total) return;
-
-  // ── 1. ACTIVATION FUNNEL ──
-  const enrolled = d.filter(r=>r.dev>0).length;
-  const used     = d.filter(r=>r.cmd>0).length;
-  const active   = d.filter(r=>r.la).length;
-  const fEl = document.getElementById('ins-funnel');
-  if(fEl){
-    const steps=[
-      {label:'Total accounts',   n:total,    color:'#888780', note:''},
-      {label:'Devices enrolled', n:enrolled, color:'#378ADD', note:''},
-      {label:'Used product',     n:used,     color:'#185FA5', note:''},
-      {label:'Active last 36d',  n:active,   color:'#1D9E75', note:'Will improve once full last activity data is available'},
-    ];
-    fEl.innerHTML = steps.map(s=>{
-      const pct=Math.round(s.n/total*100);
-      return `<div class="funnel-row">
-        <div class="funnel-label">${s.label}${s.note?`<div style="font-size:9px;color:#bbb;font-style:italic;font-weight:400">${s.note}</div>`:''}</div>
-        <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:${pct}%;background:${s.color}">${pct>10?pct+'%':''}</div></div>
-        <div class="funnel-pct">${pct}%</div>
-        <div class="funnel-n">${s.n.toLocaleString()}</div>
-      </div>`;
-    }).join('');
-  }
-
-  // ── 2. PLAN TYPE SPLIT (active accounts only) ──
-  // PLAN SPLIT PENDING: when full last_activity available, replace next line with:
-  // const ab = d.filter(r => r.daysSince !== null && r.daysSince <= 180);
-  const ab = d.filter(r=>r.dev>0 && r.cmd>0);
-  const abt = ab.length;
-  const ab_lim   = ab.filter(r=>r.lim).length;
-  const ab_full  = ab.filter(r=>!r.lim && !r.tr).length;
-  const ab_trial = ab.filter(r=>r.tr && r.trDays>0).length;
-  const pEl = document.getElementById('ins-plan');
-  if(pEl && abt){
-    const plans=[
-      {label:'Limited plan',  n:ab_lim,   pct:Math.round(ab_lim/abt*100),   color:'#EF9F27'},
-      {label:'Full plan',     n:ab_full,  pct:Math.round(ab_full/abt*100),  color:'#1D9E75'},
-      {label:'Active trials', n:ab_trial, pct:Math.round(ab_trial/abt*100), color:'#378ADD'},
-    ];
-    pEl.innerHTML=`<div style="font-size:11px;color:#aaa;margin-bottom:.5rem">
-      Based on <strong style="color:#555">${abt.toLocaleString()}</strong> active accounts (devices &gt; 0 and commands &gt; 0)
-      <span style="margin-left:6px;font-size:9px;font-style:italic">· filter will update when full last activity data is available</span>
-    </div>`+plans.map(p=>`<div class="plan-row">
-      <div class="plan-label">${p.label}</div>
-      <div class="plan-bar-wrap"><div class="plan-bar" style="width:${p.pct}%;background:${p.color}">${p.pct>8?p.pct+'%':''}</div></div>
-      <div class="plan-n">${p.n.toLocaleString()} <span style="color:#bbb">(${p.pct}%)</span></div>
-    </div>`).join('');
-  }
-
-  // ── 3. USAGE BY ACCOUNT SIZE ──
-  const sizes=[
-    {label:'1–10 dev',  lo:1,  hi:10},
-    {label:'11–50',     lo:11, hi:50},
-    {label:'51–200',    lo:51, hi:200},
-    {label:'201–500',   lo:201,hi:500},
-    {label:'500+ dev',  lo:501,hi:9999999},
-  ];
-  const sEl = document.getElementById('ins-size');
-  if(sEl){
-    sEl.innerHTML=sizes.map(s=>{
-      const bucket=d.filter(r=>r.dev>=s.lo&&r.dev<=s.hi);
-      const n=bucket.length; if(!n) return '';
-      const active_b=bucket.filter(r=>r.cmd>0);
-      const pct=Math.round(active_b.length/n*100);
-      const avg_cmd=active_b.length?Math.round(active_b.reduce((sum,r)=>sum+r.cmd,0)/active_b.length):0;
-      return `<div class="size-row">
-        <div class="size-label">${s.label}</div>
-        <div class="size-bar-wrap"><div class="size-bar" style="width:${pct}%"></div></div>
-        <div class="size-pct">${pct}%</div>
-        <div class="size-cmd">${avg_cmd.toLocaleString()} avg cmds</div>
-        <div style="font-size:10px;color:#ccc;width:65px;text-align:right;flex-shrink:0">${n.toLocaleString()} accts</div>
-      </div>`;
-    }).join('');
-  }
-
-  // ── 4. LIMITED BUT ACTIVE — UPSELL TARGETS ──
-  const warm=d.filter(r=>r.dev>0&&r.cmd>0&&r.lim);
-  const uSizes=[
-    {label:'Micro',  sub:'1–10 devices',   lo:1,  hi:10},
-    {label:'Small',  sub:'11–50 devices',  lo:11, hi:50},
-    {label:'Mid',    sub:'51–200 devices', lo:51, hi:200},
-    {label:'Large',  sub:'201+ devices',   lo:201,hi:9999999},
-  ];
-  const uEl=document.getElementById('ins-upsell');
-  if(uEl){
-    uEl.innerHTML=uSizes.map(s=>{
-      const bucket=warm.filter(r=>r.dev>=s.lo&&r.dev<=s.hi);
-      const n=bucket.length;
-      const avg_cmd=n?Math.round(bucket.reduce((sum,r)=>sum+r.cmd,0)/n):0;
-      return `<div class="upsell-card">
-        <div class="upsell-num">${n.toLocaleString()}</div>
-        <div class="upsell-label">${s.label} <span style="font-weight:400;color:#aaa;font-size:10px">${s.sub}</span></div>
-        <div class="upsell-sub">avg ${avg_cmd.toLocaleString()} commands</div>
-      </div>`;
-    }).join('');
-  }
-}
-
-
-</script>
-</html>
+>
