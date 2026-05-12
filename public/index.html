@@ -1072,8 +1072,18 @@ function processData(raw,filename,dateStr){
   buildBars('gh-bars',oemList.map(([o,n],i)=>({l:o,n,c:i<2?'fill-red':i<5?'fill-amber':'fill-grey'})),true,counts.ghost);
 
   // save snapshot
+  // Slim accounts — only fields needed for table/alerts display (reduces size ~60%)
+  const slimAccounts = allData.map(r=>({
+    d:r.d,co:r.co,ct:r.ct,email:r.email,oem:r.oem,
+    dev:r.dev,cr:r.cr,cmd:r.cmd,cpd:r.cpd,
+    lim:r.lim,tr:r.tr,trDays:r.trDays,
+    la:r.la,created:r.created,daysLeft:r.daysLeft,
+    daysSince:r.daysSince,allLP:r.allLP,someLP:r.someLP,
+    lowP:r.lowP,tl:r.tl,tl_order:r.tl_order,
+    daysIntoTrial:r.daysIntoTrial,f:r.f
+  }));
   const snap={date:dateStr,filename,total:allData.length,counts:{...counts},
-    accounts:allData,
+    accounts:slimAccounts,
     oemCounts:Object.fromEntries(Object.entries(oemCount).sort((a,b)=>b[1]-a[1]).slice(0,10)),
     ghostOEM:Object.fromEntries(Object.entries(ghostOEM).sort((a,b)=>b[1]-a[1]).slice(0,8)),
     negOEM:Object.fromEntries(Object.entries(negOEM).sort((a,b)=>b[1]-a[1]).slice(0,8)),
