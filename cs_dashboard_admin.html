@@ -2147,26 +2147,22 @@ function buildTestTab(data, oemFilter){
   // If account data was restored, render the full dashboard
   if(allData.length>0){
     filtered=[...allData];
-    // Show main dashboard (hidden by default until file loaded)
-    const md=document.getElementById('main-dashboard');if(md)md.style.display='';
-    populateDashOemFilter();
-    const _dashSel=document.getElementById('dash-oem-filter');if(_dashSel)_dashSel.value='all';
-    const _dashLb=document.getElementById('dash-lookback');if(_dashLb)_dashLb.value='180';
-    filterDashAlerts();
-    applyFilters();
-    const _ss=document.getElementById('silence-strip');if(_ss)_ss.style.display='';
-    renderTrialTable();
-    buildTestTab(allData,'all');
+    const snap=snapshots[snapshots.length-1];
     // Update header
-    if(snapshots.length){
-      const snap=snapshots[snapshots.length-1];
-      const sub=document.getElementById('dash-sub');
-      if(sub)sub.textContent=`${allData.length.toLocaleString()} accounts · ${snap.filename} · ${snap.date}`;
-    }
-    // Show loaded state in drop zone
+    const ps=document.getElementById('page-sub');
+    if(ps&&snap)ps.textContent=`${allData.length.toLocaleString()} accounts · ${snap.filename} · ${snap.date}`;
+    // Show dashboard sections
+    document.getElementById('main-dashboard').style.display='block';
+    const te=document.getElementById('trial-empty');if(te)te.style.display='none';
+    const tc=document.getElementById('trial-content');if(tc)tc.style.display='block';
+    const sb=document.getElementById('snap-badge');if(sb){sb.textContent=snapshots.length;sb.style.display='';}
+    // Reset state
+    activeFilter=null;sortKey='dev';sortDir=-1;page=0;
+    document.querySelectorAll('[data-filter]').forEach(c=>c.classList.remove('active'));
+    document.querySelectorAll('.insight-panel').forEach(p=>p.classList.remove('visible'));
+    // Show drop zone loaded state
     const dz=document.getElementById('drop-zone');
-    if(dz&&snapshots.length){
-      const snap=snapshots[snapshots.length-1];
+    if(dz&&snap){
       dz.innerHTML=`<div style="display:flex;align-items:center;gap:12px;padding:.5rem .75rem;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;flex-wrap:wrap">
         <span style="font-size:12px;color:#0F6E56;font-weight:500">✓ ${snap.filename} (${snap.date}) — ${allData.length.toLocaleString()} accounts</span>
         <button id="load-btn" style="font-size:11px;font-weight:600;padding:5px 14px;border-radius:6px;border:1.5px solid #0F6E56;background:#fff;color:#0F6E56;cursor:pointer;white-space:nowrap">⬆ Load new file</button>
@@ -2175,6 +2171,23 @@ function buildTestTab(data, oemFilter){
       document.getElementById('load-btn').addEventListener('click',e=>{e.stopPropagation();document.getElementById('file-input').click();});
       _dragDepth=0;attachDrag(dz);
     }
+    // Render all panels
+    populateTrendFilters();renderSnapsBar();applyFilters();renderTrialTable();
+    const _tsel=document.getElementById('oem-filter');
+    const _tf=document.getElementById('date-from');
+    const _tt=document.getElementById('date-to');
+    const _tselOC=_tsel?.onchange;const _tfOC=_tf?.onchange;const _ttOC=_tt?.onchange;
+    if(_tsel)_tsel.onchange=null;if(_tf)_tf.onchange=null;if(_tt)_tt.onchange=null;
+    if(_tsel){_tsel.value='all';_tsel.options.length=1;_tsel.dataset.populated='';}
+    if(_tf){_tf.options.length=1;_tf.dataset.populated='';}
+    if(_tt){_tt.options.length=1;_tt.dataset.populated='';}
+    if(_tsel)_tsel.onchange=_tselOC;if(_tf)_tf.onchange=_tfOC;if(_tt)_tt.onchange=_ttOC;
+    buildTestTab(allData,'all');
+    populateDashOemFilter();
+    const _dashSel=document.getElementById('dash-oem-filter');if(_dashSel)_dashSel.value='all';
+    const _dashLb=document.getElementById('dash-lookback');if(_dashLb)_dashLb.value='180';
+    filterDashAlerts();
+    const _ss=document.getElementById('silence-strip');if(_ss)_ss.style.display='';
   }
 })();
 </script>
