@@ -734,9 +734,12 @@ async function loadSnaps(){
           const out=await new Response(stream.readable).text();
           const lean=JSON.parse(out);
           // Reconstruct allData rows
-          allData=lean.map(r=>({d:r.d,co:r.co,ct:r.ct,email:r.em,oem:r.oem,dev:r.dev,cmd:r.cmd,
-            cr:r.cr,daysSince:r.ds,daysCreated:r.dc,la:r.la,trial:r.tr,trDays:r.td,lim:r.lim,lowP:r.lp,
-            f:r.f||[],tl:r.tl||'amber'}));
+          allData=lean.map(r=>({d:r.d||'',co:r.co||'',ct:r.ct||'',email:r.em||'',oem:r.oem||'undefined',
+            dev:r.dev||0,cmd:r.cmd||0,cr:r.cr!=null?r.cr:null,daysSince:r.ds!=null?r.ds:null,
+            daysCreated:r.dc!=null?r.dc:null,la:r.la||'',trial:r.tr||false,trDays:r.td||0,
+            lim:r.lim||false,lowP:r.lp||0,f:r.f||[],tl:r.tl||'amber',
+            cpd:r.dev>0?Math.round(r.cmd/r.dev*10)/10:0,
+            created:r.la||''}));
           console.log('Restored',allData.length,'accounts from Supabase');
         }catch(e){console.error('Decompress error:',e);}
       }
