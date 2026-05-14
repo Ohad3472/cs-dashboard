@@ -747,15 +747,33 @@ async function loadSnaps(){
 async function saveSnaps(){
   if(!snapshots.length||!allData.length)return;
   const snap=snapshots[snapshots.length-1];
-  // Compress full account data
   const lean=allData.map(r=>({d:r.d,co:r.co,ct:r.ct,em:r.email,oem:r.oem,dev:r.dev,cmd:r.cmd,
     cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.trial,td:r.trDays,lim:r.lim,lp:r.lowP,
     f:r.f,tl:r.tl}));
   const raw=JSON.stringify(lean);
-  const blob=new Blob([raw],{type:'text/plain'});
-  const stream=blob.stream().pipeThrough(new CompressionStream('gzip'));
-  const compressed=await new Response(stream).arrayBuffer();
-  const b64=btoa(String.fromCharCode(...new Uint8Array(compressed)));
+  // Compress using CompressionStream with chunked reading
+  const cs=new CompressionStream('gzip');
+  const writer=cs.writable.getWriter();
+  const enc=new TextEncoder();
+  const chunkSize=65536;
+  for(let i=0;i<raw.length;i+=chunkSize){
+    writer.write(enc.encode(raw.slice(i,i+chunkSize)));
+  }
+  writer.close();
+  const chunks=[];
+  const reader=cs.readable.getReader();
+  while(true){const{done,value}=await reader.read();if(done)break;chunks.push(value);}
+  const total=chunks.reduce((s,c)=>s+c.length,0);
+  const merged=new Uint8Array(total);
+  let offset=0;
+  for(const c of chunks){merged.set(c,offset);offset+=c.length;}
+  // Convert to base64 in chunks
+  let b64='';
+  const CHUNK=8192;
+  for(let i=0;i<merged.length;i+=CHUNK){
+    b64+=String.fromCharCode(...merged.slice(i,i+CHUNK));
+  }
+  b64=btoa(b64);
   const r=await fetch(SUPA_URL+'/rest/v1/snapshots',{
     method:'POST',
     headers:{...SUPA_WRITE_HDR,'Prefer':'resolution=merge-duplicates'},
