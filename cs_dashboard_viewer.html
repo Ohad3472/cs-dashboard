@@ -2139,7 +2139,7 @@ function buildTestTab(data, oemFilter){
         <span style="font-size:10px;color:#aaa">or drag &amp; drop</span>
       </div><input type="file" id="file-input" accept=".xlsx,.xls,.csv" onchange="handleFile(this.files[0])" style="display:none">`;
       document.getElementById('load-btn').addEventListener('click',e=>{e.stopPropagation();document.getElementById('file-input').click();});
-      _dragDepth=0;attachDrag(dz);
+      _dragDepth=0;const _dz2=document.getElementById('drop-zone');if(_dz2)attachDrag(_dz2);
     }
     // Render all panels
     populateTrendFilters();renderSnapsBar();applyFilters();renderTrialTable();
