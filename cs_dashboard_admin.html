@@ -727,7 +727,8 @@ async function loadSnaps(){
       if(latest?.account_data){
         try{
           const bin=atob(latest.account_data);
-          const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));
+          const bytes=new Uint8Array(bin.length);
+          for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
           const stream=new DecompressionStream('gzip');
           const writer=stream.writable.getWriter();
           writer.write(bytes);writer.close();
