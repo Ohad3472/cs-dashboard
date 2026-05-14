@@ -737,7 +737,7 @@ async function loadSnaps(){
           // Reconstruct allData rows
           allData=lean.map(r=>({d:r.d||'',co:r.co||'',ct:r.ct||'',email:r.em||'',oem:r.oem||'undefined',
             dev:r.dev||0,cmd:r.cmd||0,cr:r.cr!=null?r.cr:null,daysSince:r.ds!=null?r.ds:null,
-            daysCreated:r.dc!=null?r.dc:null,la:r.la||'',tr:r.tr||false,trDays:r.td||0,
+            daysCreated:r.dc!=null?r.dc:null,la:r.la||'',tr:r.tr||false,trDays:r.td!=null?r.td:null,
             lim:r.lim||false,lowP:r.lp||0,f:r.f||[],tl:r.tl||'amber',
             cpd:r.dev>0?Math.round(r.cmd/r.dev*10)/10:0,
             created:r.la||''}));
@@ -2158,6 +2158,7 @@ function buildTestTab(data, oemFilter){
     const sb=document.getElementById('snap-badge');if(sb){sb.textContent=snapshots.length;sb.style.display='';}
     // Populate trialData from restored allData
     trialData=allData.filter(r=>r.tr&&r.trDays!=null&&r.trDays>0);
+    console.log('DEBUG trialData:',trialData.length,'sample tr:',allData.find(r=>r.tr)?.tr,'sample trDays:',allData.find(r=>r.tr)?.trDays);
     // Reset state
     activeFilter=null;sortKey='dev';sortDir=-1;page=0;
     document.querySelectorAll('[data-filter]').forEach(c=>c.classList.remove('active'));
