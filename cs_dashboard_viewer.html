@@ -683,21 +683,83 @@ const LS_KEY='cs_dash_v7';
 const SUPA_URL='https://pkyngucjjcdukfhhqysh.supabase.co';
 const SUPA_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBreW5ndWNqamNkdWtmaGhxeXNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1Njg3NjEsImV4cCI6MjA5NDE0NDc2MX0.r-mYmlOJ6__obtUAGV-2Ad92tA7Vu4jzImwrtwEKxKk';
 const SUPA_HDR={'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json'};
+const SUPA_SERVICE='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBreW5ndWNqamNkdWtmaGhxeXNoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODU2ODc2MSwiZXhwIjoyMDk0MTQ0NzYxfQ.ZQWmc6C9rGIHLgRyPJYM2aJGHPuE1pgbZbsPQaLWyEs';
+const SUPA_WRITE_HDR={'apikey':SUPA_SERVICE,'Authorization':'Bearer '+SUPA_SERVICE,'Content-Type':'application/json'};
 
 async function loadSnaps(){
   try{
-    const r=await fetch(SUPA_URL+'/rest/v1/snapshots?select=snap_data&order=report_date.asc',{headers:SUPA_HDR});
+    const r=await fetch(SUPA_URL+'/rest/v1/snapshots?select=report_date,snap_data,account_data&order=report_date.asc',{headers:SUPA_HDR});
     const d=await r.json();
-    if(Array.isArray(d))snapshots=d.map(x=>x.snap_data).filter(Boolean);
-    else snapshots=[];
+    if(Array.isArray(d)){
+      snapshots=d.map(x=>x.snap_data).filter(Boolean);
+      // Restore latest account data
+      const latest=d[d.length-1];
+      if(latest?.account_data){
+        try{
+          const bin=atob(latest.account_data);
+          const bytes=new Uint8Array(bin.length);
+          for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+          const stream=new DecompressionStream('gzip');
+          const writer=stream.writable.getWriter();
+          writer.write(bytes);writer.close();
+          const out=await new Response(stream.readable).text();
+          const lean=JSON.parse(out);
+          // Reconstruct allData rows
+          allData=lean.map(r=>({d:r.d||'',co:r.co||'',ct:r.ct||'',email:r.em||'',oem:r.oem||'undefined',
+            dev:r.dev||0,cmd:r.cmd||0,cr:r.cr!=null?r.cr:null,daysSince:r.ds!=null?r.ds:null,
+            daysCreated:r.dc!=null?r.dc:null,la:r.la||'',trial:r.tr||false,trDays:r.td||0,
+            lim:r.lim||false,lowP:r.lp||0,f:r.f||[],tl:r.tl||'amber',
+            cpd:r.dev>0?Math.round(r.cmd/r.dev*10)/10:0,
+            created:r.la||''}));
+          console.log('Restored',allData.length,'accounts from Supabase');
+        }catch(e){console.error('Decompress error:',e);}
+      }
+    } else snapshots=[];
   }catch(e){console.error('loadSnaps:',e);snapshots=[];}
 }
 
-async function saveSnaps(){} // viewer: read-only
+async function saveSnaps(){return;} async function _saveSnaps_disabled(){
+  if(!snapshots.length||!allData.length)return;
+  const snap=snapshots[snapshots.length-1];
+  const lean=allData.map(r=>({d:r.d,co:r.co,ct:r.ct,em:r.email,oem:r.oem,dev:r.dev,cmd:r.cmd,
+    cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.trial,td:r.trDays,lim:r.lim,lp:r.lowP,
+    f:r.f,tl:r.tl}));
+  const raw=JSON.stringify(lean);
+  // Compress using CompressionStream with chunked reading
+  const cs=new CompressionStream('gzip');
+  const writer=cs.writable.getWriter();
+  const enc=new TextEncoder();
+  const chunkSize=65536;
+  for(let i=0;i<raw.length;i+=chunkSize){
+    writer.write(enc.encode(raw.slice(i,i+chunkSize)));
+  }
+  writer.close();
+  const chunks=[];
+  const reader=cs.readable.getReader();
+  while(true){const{done,value}=await reader.read();if(done)break;chunks.push(value);}
+  const total=chunks.reduce((s,c)=>s+c.length,0);
+  const merged=new Uint8Array(total);
+  let offset=0;
+  for(const c of chunks){merged.set(c,offset);offset+=c.length;}
+  // Convert to base64 in chunks
+  let b64='';
+  const CHUNK=8192;
+  for(let i=0;i<merged.length;i+=CHUNK){
+    b64+=String.fromCharCode(...merged.slice(i,i+CHUNK));
+  }
+  b64=btoa(b64);
+  const r=await fetch(SUPA_URL+'/rest/v1/snapshots',{
+    method:'POST',
+    headers:{...SUPA_WRITE_HDR,'Prefer':'resolution=merge-duplicates'},
+    body:JSON.stringify({report_date:snap.date,filename:snap.filename,snap_data:snap,account_data:b64})
+  });
+  if(!r.ok){const err=await r.text();console.error('Supabase save error:',r.status,err);}
+  else{console.log('Saved to Supabase OK:',snap.date,'accounts:',lean.length);}
+}
 
 async function deleteSnapRemote(date){
   await fetch(SUPA_URL+'/rest/v1/snapshots?report_date=eq.'+encodeURIComponent(date),{
-    method:'DELETE',headers:SUPA_HDR
+    method:'DELETE',headers:SUPA_WRITE_HDR
   });
 }
 
@@ -1158,7 +1220,7 @@ function renderSnapsBar(){
   if(!snapshots.length){bar.innerHTML='';return;}
   bar.innerHTML='<span class="snap-label">Snapshots:</span>'+snapshots.map((s,i)=>`<span class="snap-chip ${i===snapshots.length-1?'current':''}">📅 ${s.date}</span>`).join('');
 }
-function deleteSnap(i){} // viewer: read-only
+function deleteSnap(i){return;} function _deleteSnap_disabled(i){const date=snapshots[i]?.date;snapshots.splice(i,1);if(date)deleteSnapRemote(date);renderSnapsBar();renderTrends();const b=document.getElementById('snap-badge');if(snapshots.length){b.textContent=snapshots.length;b.style.display='';}else b.style.display='none';}
 
 /* ═══ TRENDS ═══ */
 function populateTrendFilters(){
@@ -2051,13 +2113,55 @@ function buildTestTab(data, oemFilter){
 (async function(){
   await loadSnaps();
   renderSnapsBar();
-  const vs=document.getElementById('viewer-status');
-  if(snapshots.length){
-    const b=document.getElementById('snap-badge');
-    b.textContent=snapshots.length;b.style.display='';
-    populateTrendFilters();
+  if(snapshots.length){const b=document.getElementById('snap-badge');b.textContent=snapshots.length;b.style.display='';populateTrendFilters();}
+  // If account data was restored, render the full dashboard
+  if(allData.length>0){
+    filtered=[...allData];
+    const snap=snapshots[snapshots.length-1];
+    // Update header
+    const ps=document.getElementById('page-sub');
+    if(ps&&snap)ps.textContent=`${allData.length.toLocaleString()} accounts · ${snap.filename} · ${snap.date}`;
+    // Show dashboard sections
+    document.getElementById('main-dashboard').style.display='block';
+    const te=document.getElementById('trial-empty');if(te)te.style.display='none';
+    const tc=document.getElementById('trial-content');if(tc)tc.style.display='block';
+    const sb=document.getElementById('snap-badge');if(sb){sb.textContent=snapshots.length;sb.style.display='';}
+    // Reset state
+    activeFilter=null;sortKey='dev';sortDir=-1;page=0;
+    document.querySelectorAll('[data-filter]').forEach(c=>c.classList.remove('active'));
+    document.querySelectorAll('.insight-panel').forEach(p=>p.classList.remove('visible'));
+    // Show drop zone loaded state
+    const dz=document.getElementById('drop-zone');
+    if(dz&&snap){
+      dz.innerHTML=`<div style="display:flex;align-items:center;gap:12px;padding:.5rem .75rem;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:#0F6E56;font-weight:500">✓ ${snap.filename} (${snap.date}) — ${allData.length.toLocaleString()} accounts</span>
+        <button id="load-btn" style="font-size:11px;font-weight:600;padding:5px 14px;border-radius:6px;border:1.5px solid #0F6E56;background:#fff;color:#0F6E56;cursor:pointer;white-space:nowrap">⬆ Load new file</button>
+        <span style="font-size:10px;color:#aaa">or drag &amp; drop</span>
+      </div><input type="file" id="file-input" accept=".xlsx,.xls,.csv" onchange="handleFile(this.files[0])" style="display:none">`;
+      document.getElementById('load-btn').addEventListener('click',e=>{e.stopPropagation();document.getElementById('file-input').click();});
+      _dragDepth=0;attachDrag(dz);
+    }
+    // Render all panels
+    populateTrendFilters();renderSnapsBar();applyFilters();renderTrialTable();
+    const _tsel=document.getElementById('oem-filter');
+    const _tf=document.getElementById('date-from');
+    const _tt=document.getElementById('date-to');
+    const _tselOC=_tsel?.onchange;const _tfOC=_tf?.onchange;const _ttOC=_tt?.onchange;
+    if(_tsel)_tsel.onchange=null;if(_tf)_tf.onchange=null;if(_tt)_tt.onchange=null;
+    if(_tsel){_tsel.value='all';_tsel.options.length=1;_tsel.dataset.populated='';}
+    if(_tf){_tf.options.length=1;_tf.dataset.populated='';}
+    if(_tt){_tt.options.length=1;_tt.dataset.populated='';}
+    if(_tsel)_tsel.onchange=_tselOC;if(_tf)_tf.onchange=_tfOC;if(_tt)_tt.onchange=_ttOC;
+    buildTestTab(allData,'all');
+    populateDashOemFilter();
+    const _dashSel=document.getElementById('dash-oem-filter');if(_dashSel)_dashSel.value='all';
+    const _dashLb=document.getElementById('dash-lookback');if(_dashLb)_dashLb.value='180';
+    filterDashAlerts();
+    const _ss=document.getElementById('silence-strip');if(_ss)_ss.style.display='';
+    const vs=document.getElementById('viewer-status');
     if(vs)vs.textContent=snapshots.length+' snapshot'+(snapshots.length>1?'s':'')+' loaded · last: '+snapshots[snapshots.length-1]?.date;
   } else {
+    const vs=document.getElementById('viewer-status');
     if(vs)vs.textContent='No data yet — admin will upload soon';
   }
 })();
