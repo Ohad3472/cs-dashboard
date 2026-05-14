@@ -2126,6 +2126,8 @@ function buildTestTab(data, oemFilter){
     const te=document.getElementById('trial-empty');if(te)te.style.display='none';
     const tc=document.getElementById('trial-content');if(tc)tc.style.display='block';
     const sb=document.getElementById('snap-badge');if(sb){sb.textContent=snapshots.length;sb.style.display='';}
+    // Populate trialData from restored allData
+    trialData=allData.filter(r=>r.trial&&r.trDays!=null&&r.trDays>0);
     // Reset state
     activeFilter=null;sortKey='dev';sortDir=-1;page=0;
     document.querySelectorAll('[data-filter]').forEach(c=>c.classList.remove('active'));
