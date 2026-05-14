@@ -846,7 +846,7 @@ function attachDrag(el){
   el.addEventListener('dragover',e=>{e.preventDefault();});
   el.addEventListener('drop',e=>{e.preventDefault();_dragDepth=0;el.classList.remove('drag-over');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
 }
-if(document.getElementById("drop-zone"))attachDrag(dz);
+// viewer: no drop zone
 function handleFile(f){
   pendingFile=f;pendingFilename=f.name;
   const m=f.name.match(/(\d{4})(\d{2})(\d{2})/);
