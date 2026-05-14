@@ -752,7 +752,7 @@ async function saveSnaps(){
   if(!snapshots.length||!allData.length)return;
   const snap=snapshots[snapshots.length-1];
   const lean=allData.map(r=>({d:r.d,co:r.co,ct:r.ct,em:r.email,oem:r.oem,dev:r.dev,cmd:r.cmd,
-    cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.trial,td:r.trDays,lim:r.lim,lp:r.lowP,
+    cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.tr,td:r.trDays,lim:r.lim,lp:r.lowP,
     f:r.f,tl:r.tl}));
   const raw=JSON.stringify(lean);
   // Compress using CompressionStream with chunked reading
