@@ -2147,10 +2147,13 @@ function buildTestTab(data, oemFilter){
   // If account data was restored, render the full dashboard
   if(allData.length>0){
     filtered=[...allData];
+    // Show main dashboard (hidden by default until file loaded)
+    const md=document.getElementById('main-dashboard');if(md)md.style.display='';
     populateDashOemFilter();
     const _dashSel=document.getElementById('dash-oem-filter');if(_dashSel)_dashSel.value='all';
     const _dashLb=document.getElementById('dash-lookback');if(_dashLb)_dashLb.value='180';
     filterDashAlerts();
+    applyFilters();
     const _ss=document.getElementById('silence-strip');if(_ss)_ss.style.display='';
     renderTrialTable();
     buildTestTab(allData,'all');
