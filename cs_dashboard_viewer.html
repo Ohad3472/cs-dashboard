@@ -707,7 +707,7 @@ async function loadSnaps(){
           // Reconstruct allData rows
           allData=lean.map(r=>({d:r.d||'',co:r.co||'',ct:r.ct||'',email:r.em||'',oem:r.oem||'undefined',
             dev:r.dev||0,cmd:r.cmd||0,cr:r.cr!=null?r.cr:null,daysSince:r.ds!=null?r.ds:null,
-            daysCreated:r.dc!=null?r.dc:null,la:r.la||'',tr:r.tr||false,trDays:r.td!=null?r.td:null,
+            daysCreated:r.dc!=null?r.dc:null,la:r.la||'',tr:r.tr||false,trDays:r.td!=null?r.td:null,daysIntoTrial:r.di!=null?r.di:null,
             lim:r.lim||false,lowP:r.lp||0,f:r.f||[],tl:r.tl||'amber',
             cpd:r.dev>0?Math.round(r.cmd/r.dev*10)/10:0,
             created:r.la||''}));
@@ -722,7 +722,7 @@ async function saveSnaps(){return;} async function _saveSnaps_disabled(){
   if(!snapshots.length||!allData.length)return;
   const snap=snapshots[snapshots.length-1];
   const lean=allData.map(r=>({d:r.d,co:r.co,ct:r.ct,em:r.email,oem:r.oem,dev:r.dev,cmd:r.cmd,
-    cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.trial,td:r.trDays,lim:r.lim,lp:r.lowP,
+    cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.tr,td:r.trDays,lim:r.lim,lp:r.lowP,
     f:r.f,tl:r.tl}));
   const raw=JSON.stringify(lean);
   // Compress using CompressionStream with chunked reading
@@ -1169,6 +1169,18 @@ function changePage(d){page+=d;renderTable();window.scrollTo(0,document.getEleme
 
 /* ═══ TRIAL MONITOR TABLE ═══ */
 function renderTrialTable(){
+  // Always update summary cards (works on both CSV upload and Supabase restore)
+  const tmRed=trialData.filter(r=>r.tl==='red').length;
+  const tmAmber=trialData.filter(r=>r.tl==='amber').length;
+  const tmGreen=trialData.filter(r=>r.tl==='green').length;
+  const tmNoDev=trialData.filter(r=>r.dev===0).length;
+  setText('tm-red',tmRed.toLocaleString());
+  setText('tm-amber',tmAmber.toLocaleString());
+  setText('tm-green',tmGreen.toLocaleString());
+  setText('tm-total',trialData.length.toLocaleString());
+  setText('tm-nodev',tmNoDev.toLocaleString());
+  const badge=document.getElementById('trial-badge');
+  if(badge){badge.textContent=trialData.length;badge.style.display='';}
   const tlFilter=document.getElementById('tm-tl-filter')?.value||'all';
   const oemFilter=document.getElementById('tm-oem-filter')?.value||'all';
   const q=(document.getElementById('tm-search')?.value||'').toLowerCase();
