@@ -846,7 +846,7 @@ function attachDrag(el){
   el.addEventListener('dragover',e=>{e.preventDefault();});
   el.addEventListener('drop',e=>{e.preventDefault();_dragDepth=0;el.classList.remove('drag-over');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
 }
-attachDrag(dz);
+if(document.getElementById("drop-zone"))attachDrag(dz);
 function handleFile(f){
   pendingFile=f;pendingFilename=f.name;
   const m=f.name.match(/(\d{4})(\d{2})(\d{2})/);
@@ -1054,7 +1054,7 @@ function processData(raw,filename,dateStr){
     <span style="font-size:10px;color:#aaa">or drag &amp; drop</span>
   </div><input type="file" id="file-input" accept=".xlsx,.xls,.csv" onchange="handleFile(this.files[0])" style="display:none">`;
   document.getElementById('load-btn').addEventListener('click',e=>{e.stopPropagation();document.getElementById('file-input').click();});
-  _dragDepth=0;attachDrag(dz);
+  _dragDepth=0;if(dz)attachDrag(dz);
   document.getElementById('page-sub').textContent=`${allData.length.toLocaleString()} accounts · ${filename} · ${dateStr}`;
   document.getElementById('main-dashboard').style.display='block';
   document.getElementById('trial-empty').style.display='none';
