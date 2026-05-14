@@ -1,0 +1,2066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Customer Success — Account Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/*
+=============================================================
+  CS ACCOUNT DASHBOARD — v7
+  2026-05-11
+
+  CONSTANTS (edit to change behaviour)
+  ─────────────────────────────────────
+  LOW_CMD_THRESHOLD = 2       cmd/device below this → low_cmd alert
+  DECLINE_DAYS      = 30      days silent → declining alert
+  EXPIRY_CAP_DAYS   = 1095    credits >3yr → no risk shown
+  SINGLE_DEV_DAYS   = 90      trial-ended window for single-dev alert
+  EXCLUDE_COUNTRY   = 'ghana' excluded from all counts + table
+
+  ALERT CATEGORIES  (row colour = flag dot colour = same thing)
+  ──────────────────────────────────────────────────────────
+  Red   → Churn Risk
+  Amber → Inactive
+  Blue  → Billing / Upsell
+  Grey  → Ops / Data Quality
+
+  TL SCORE  (per-account composite — separate concept)
+  ──────────────────────────────────────────────────────────
+  🟢 Low churn   🟡 Mid churn   🔴 High churn
+
+  PENDING FROM DATA TEAM
+  ──────────────────────
+  login_count_last_30_days, cmd_app_install, cmd_device_settings,
+  cmd_remote_support, cmd_power_management, cmd_advanced_messaging,
+  devices_yoy_change
+=============================================================
+*/
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;color:#1a1a1a;background:#f4f3ef;min-height:100vh}
+.page{max-width:1420px;margin:0 auto;padding:1.25rem 1.75rem 3rem}
+.page-title{font-size:20px;font-weight:500;color:#111;margin-bottom:2px}
+.page-sub{font-size:11px;color:#aaa;margin-bottom:.75rem}
+
+/* Tabs */
+.tabs{display:flex;border-bottom:1.5px solid #e0ddd7;margin-bottom:1rem}
+.tab{padding:.5rem 1.2rem;font-size:12px;font-weight:500;color:#999;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1.5px;transition:color .15s,border-color .15s;white-space:nowrap}
+.tab:hover{color:#555}
+.tab.active{color:#111;border-bottom-color:#111}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.tab-badge{display:inline-block;font-size:9px;font-weight:600;background:#EEEDFE;color:#534AB7;border-radius:100px;padding:1px 6px;margin-left:4px;vertical-align:middle}
+
+/* Drop zone */
+#drop-zone{border:2px dashed #d0cdc5;border-radius:12px;padding:1.5rem;text-align:center;background:#faf9f6;cursor:pointer;transition:border-color .2s,background .2s;margin-bottom:.75rem}
+#drop-zone.drag-over{border-color:#4a90d9;background:#edf4ff}
+#drop-zone.loaded{border-color:#5DCAA5;background:#f0faf6;padding:.9rem}
+.dz-loaded{font-size:12px;color:#0F6E56;font-weight:500}
+#file-input{display:none}
+
+/* Date modal */
+#date-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:1000;align-items:center;justify-content:center}
+#date-modal.visible{display:flex}
+.modal-box{background:#fff;border-radius:14px;padding:1.5rem;width:340px;box-shadow:0 8px 40px rgba(0,0,0,.18)}
+.modal-title{font-size:15px;font-weight:500;color:#111;margin-bottom:.3rem}
+.modal-sub{font-size:11px;color:#aaa;margin-bottom:.9rem}
+.modal-filename{font-size:12px;font-weight:500;color:#0F6E56;background:#f0faf6;border-radius:6px;padding:.4rem .6rem;margin-bottom:.9rem}
+.modal-label{font-size:11px;font-weight:500;color:#555;margin-bottom:.3rem;display:block}
+.modal-date{width:100%;font-size:13px;padding:.5rem .75rem;border:1px solid #ddd;border-radius:8px;outline:none;color:#111;margin-bottom:.9rem}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end}
+.modal-btn{font-size:12px;padding:6px 16px;border-radius:8px;cursor:pointer;font-weight:500;border:none}
+.modal-btn.cancel{background:#f2f1ed;color:#666}
+.modal-btn.confirm{background:#111;color:#fff}
+
+/* Snapshots bar */
+#snapshots-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:.6rem;align-items:center;min-height:22px}
+.snap-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;background:#fff;border:1px solid #e0ddd7;border-radius:100px;padding:2px 10px;color:#555}
+.snap-chip.current{border-color:#5DCAA5;color:#0F6E56;background:#f0faf6}
+.snap-x{cursor:pointer;color:#ccc;font-size:13px;margin-left:2px}
+.snap-x:hover{color:#c0392b}
+.snap-label{font-size:10px;color:#aaa;margin-right:2px}
+
+/* Alert rows */
+.alerts-block{display:flex;flex-direction:column;gap:5px;margin-bottom:8px}
+.alert-row{display:flex;align-items:stretch;gap:5px}
+.row-pill{display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;border-radius:6px;color:#fff;width:72px;flex-shrink:0;padding:4px 6px;text-align:center;line-height:1.35}
+.pill-churn{background:#A32D2D}
+.pill-inactive{background:#854F0B}
+.pill-billing{background:#185FA5}
+.pill-ops{background:#888780}
+.cards-row{display:flex;gap:5px;flex:1}
+.acard{flex:1;border-radius:8px;padding:.5rem .75rem;cursor:pointer;border:1.5px solid transparent;transition:filter .12s;min-width:0;position:relative}
+.acard:hover{filter:brightness(.96)}
+.acard.active{box-shadow:0 0 0 2px currentColor}
+.acard.placeholder{cursor:default;background:transparent!important;border:1.5px dashed #e5e2db!important;display:flex;align-items:center;justify-content:center}
+.c-r{background:#FCEBEB;color:#A32D2D;border-color:#F7C1C1}
+.c-a{background:#FAEEDA;color:#854F0B;border-color:#FAC775}
+.c-b{background:#E6F1FB;color:#185FA5;border-color:#B5D4F4}
+.c-g{background:#F1EFE8;color:#888780;border-color:#D3D1C7}
+.card-num{font-size:18px;font-weight:600;line-height:1.1;color:inherit}
+.card-label{font-size:11px;font-weight:500;color:#333;margin-top:2px;line-height:1.3}
+.card-sub{font-size:10px;color:#aaa;margin-top:1px}
+.new-badge{position:absolute;top:5px;right:6px;font-size:8px;font-weight:600;background:#EEEDFE;color:#3C3489;border-radius:100px;padding:1px 5px}
+
+/* Legend strip */
+.legend-strip{display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;padding:.45rem .9rem;background:#fff;border:0.5px solid #e5e2db;border-radius:8px;margin-bottom:8px;font-size:11px;color:#555}
+.leg-sep{width:1px;height:16px;background:#e5e2db;flex-shrink:0}
+.leg-item{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.leg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.leg-label{font-size:9px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#aaa;margin-right:.15rem}
+
+/* Insight panels */
+.insight-panel{display:none;margin-top:6px;border-radius:10px;overflow:hidden;border:1px solid #e5e2db}
+.insight-panel.visible{display:flex}
+.insight-main{flex:1;background:#fff;padding:.9rem 1.1rem}
+.insight-side{width:240px;flex-shrink:0;background:#f8f7f3;border-left:1px solid #e5e2db;padding:.85rem 1rem;font-size:11px;color:#666;line-height:1.6}
+.insight-header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:.6rem}
+.insight-title{font-size:13px;font-weight:500;color:#111}
+.insight-sub{font-size:11px;color:#aaa;margin-left:8px}
+.insight-close{font-size:18px;color:#ccc;cursor:pointer;margin-left:1rem}
+.insight-close:hover{color:#555}
+.bar-rows{display:flex;flex-direction:column;gap:3px}
+.bar-row{display:flex;align-items:center;gap:7px}
+.bar-name{font-size:11px;color:#666;width:95px;text-align:right;flex-shrink:0}
+.bar-track{flex:1;height:13px;background:#f2f1ed;border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;border-radius:3px;transition:width .5s ease}
+.fill-red{background:#e9a0a0}.fill-amber{background:#f5c878}.fill-blue{background:#85B7EB}.fill-green{background:#9FE1CB}.fill-grey{background:#ccc}
+.tbox{display:flex;align-items:flex-start;gap:6px;border-left:3px solid #1D9E75;border-radius:0 6px 6px 0;padding:.45rem .6rem;margin-top:.5rem;background:#f0faf6}
+.tbox.amber{background:#fffbf0;border-left-color:#EF9F27}
+.tbox.blue{background:#edf4ff;border-left-color:#185FA5}
+.tbox.red{background:#fdecea;border-left-color:#A32D2D}
+.th-text{font-size:11px;color:#1a1a1a;line-height:1.5}
+.th-count{font-size:11px;font-weight:500;margin-left:auto;white-space:nowrap;padding-left:8px;color:#0F6E56}
+.th-count.amber{color:#854F0B}.th-count.blue{color:#185FA5}
+.side-title{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#aaa;margin-bottom:.4rem}
+.side-stat{display:flex;justify-content:space-between;padding:3px 0;border-bottom:.5px solid #ece9e3;font-size:11px}
+.side-stat:last-child{border-bottom:none}
+.side-label{color:#888}.side-val{font-weight:500;color:#444}
+
+/* Tier strip */
+.sec-label{font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#bbb;margin-bottom:4px;margin-top:8px;display:block}
+.tier-strip{display:flex;gap:5px}
+.tier-card{flex:1;background:#fff;border:1.5px solid #e5e2db;border-radius:8px;padding:.4rem .7rem;cursor:pointer;transition:border-color .12s}
+.tier-card:hover{border-color:#bbb}
+.tier-card.active{border-color:#555;box-shadow:0 0 0 1.5px #555}
+.tier-num{font-size:16px;font-weight:500;color:#333}
+.tier-sub{font-size:10px;color:#aaa}
+
+/* Shared table styles */
+.tbl-header{display:flex;align-items:flex-start;justify-content:space-between;margin-top:1rem;margin-bottom:.4rem;gap:1rem}
+.tbl-title{font-size:15px;font-weight:500;color:#111}
+.tbl-count{font-size:11px;color:#999;margin-top:2px}
+.tbl-ctrl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input[type=text]{font-size:12px;padding:5px 11px;border:1px solid #ddd;border-radius:7px;background:#fff;color:#111;width:210px;outline:none}
+input[type=text]:focus{border-color:#999}
+.btn{font-size:12px;padding:5px 13px;border:1px solid #ddd;border-radius:7px;background:#fff;color:#333;cursor:pointer;white-space:nowrap}
+.btn:hover{background:#f0efe9}
+.btn.green{border-color:#5DCAA5;color:#0F6E56}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:.4rem;min-height:20px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;background:#fff;border:1px solid #ccc;border-radius:100px;padding:2px 10px}
+.fdot{display:inline-block;width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.chip-x{cursor:pointer;color:#bbb;margin-left:2px;font-size:13px}
+.chip-x:hover{color:#333}
+.fd-r{background:#c0392b}.fd-a{background:#c68a00}.fd-b{background:#1a5fa8}.fd-g{background:#aaa}
+.tbl-wrap{border:1px solid #e0ddd7;border-radius:10px;overflow:hidden;background:#fff;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:11px;min-width:0}
+thead{background:#f8f7f3}
+th{font-size:11px;font-weight:500;color:#999;text-align:left;padding:6px 7px;border-bottom:1px solid #ece9e3;white-space:nowrap;cursor:pointer;user-select:none}
+th:hover{color:#333}
+.sarr{font-size:9px;margin-left:3px;opacity:.25}
+.sarr.on{opacity:1}
+td{padding:5px 7px;border-bottom:1px solid #f2efe9;white-space:nowrap;color:#111;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#faf9f6}
+.badge{display:inline-block;font-size:10px;padding:1px 7px;border-radius:100px;font-weight:500}
+.b-lim{background:#FAEEDA;color:#854F0B}
+.b-trial{background:#E6F1FB;color:#185FA5}
+.b-oem{background:#f2f1ed;color:#666;border:1px solid #e5e2db}
+.b-cp{background:#E6F1FB;color:#185FA5}
+.neg{color:#A32D2D;font-weight:500}
+.muted{color:#ccc}
+.flags{display:inline-flex;align-items:center;gap:2px;margin-right:3px;vertical-align:middle}
+.rfdot{display:inline-block;width:6px;height:6px;border-radius:50%;vertical-align:middle}
+.pagination{display:flex;align-items:center;gap:10px;margin-top:.75rem;font-size:12px;color:#aaa}
+.pbtn{padding:4px 12px;border:1px solid #ddd;border-radius:7px;background:#fff;cursor:pointer;font-size:12px;color:#333}
+.pbtn:disabled{opacity:.35;cursor:default}
+
+/* TL dot */
+.tl-g{display:inline-block;width:9px;height:9px;border-radius:50%;background:#1D9E75;vertical-align:middle}
+.tl-a{display:inline-block;width:9px;height:9px;border-radius:50%;background:#EF9F27;vertical-align:middle}
+.tl-r{display:inline-block;width:9px;height:9px;border-radius:50%;background:#E24B4A;vertical-align:middle}
+
+/* Trial Monitor tab */
+.trial-summary{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:1rem}
+.ts-card{background:#fff;border:1px solid #e5e2db;border-radius:8px;padding:.6rem .85rem}
+.ts-num{font-size:20px;font-weight:600;color:#111}
+.ts-label{font-size:10px;color:#aaa;margin-top:2px}
+.ts-card.red .ts-num{color:#A32D2D}
+.ts-card.amber .ts-num{color:#854F0B}
+.ts-card.green .ts-num{color:#085041}
+.trial-filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:.75rem}
+select.filter-sel{font-size:12px;padding:4px 10px;border:1px solid #ddd;border-radius:7px;background:#fff;color:#111;outline:none;cursor:pointer}
+
+/* Trends tab */
+.trends-filters{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:.75rem 1rem;background:#fff;border:1px solid #e5e2db;border-radius:10px;margin-bottom:1rem}
+.tf-label{font-size:11px;font-weight:500;color:#555;white-space:nowrap}
+.tf-sep{width:1px;height:20px;background:#e5e2db;flex-shrink:0}
+.mgmt-section{margin-bottom:1.5rem}
+.mgmt-title{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin-bottom:.6rem}
+.pie-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.pie-card{background:#fff;border:1px solid #e5e2db;border-radius:10px;padding:.75rem 1rem;overflow:hidden}
+.pie-card-title{font-size:11px;font-weight:500;color:#555;margin-bottom:.5rem}
+.pie-wrap{position:relative;height:160px;margin-bottom:.5rem}
+.pie-legend{display:flex;flex-direction:column;gap:2px}
+.pie-leg-row{display:flex;align-items:center;gap:5px;font-size:10px;color:#666}
+.pie-leg-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.cat-section{margin-bottom:1rem}
+.cat-label{font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#fff;border-radius:5px;padding:3px 10px;display:inline-block;margin-bottom:.6rem}
+.cat-churn{background:#A32D2D}.cat-inactive{background:#854F0B}.cat-billing{background:#185FA5}.cat-ops{background:#888780}
+.charts-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.chart-card{background:#fff;border:1px solid #e5e2db;border-radius:10px;padding:.7rem .9rem;overflow:hidden}
+.chart-title{font-size:10px;font-weight:500;color:#888;margin-bottom:.3rem}
+.chart-num{font-size:20px;font-weight:500;color:#111;line-height:1}
+.chart-delta{font-size:10px;margin:.2rem 0 .4rem}
+.delta-up{color:#c0392b}.delta-down{color:#1D9E75}.delta-flat{color:#aaa}
+.chart-wrap{height:80px;position:relative}
+.snap-log{margin-top:1.5rem}
+.snap-log-title{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin-bottom:.5rem}
+.snap-tbl{width:100%;border-collapse:collapse;font-size:11px}
+.snap-tbl th{font-size:10px;font-weight:500;color:#aaa;text-align:left;padding:5px 8px;border-bottom:1px solid #ece9e3;background:#f8f7f3}
+.snap-tbl td{padding:5px 8px;border-bottom:.5px solid #f2efe9;color:#555}
+.snap-tbl tr:last-child td{border-bottom:none}
+.snap-del{color:#ddd;cursor:pointer;font-size:14px}
+.snap-del:hover{color:#c0392b}
+.info-note{font-size:11px;color:#aaa;font-style:italic;padding:.5rem 0}
+
+/* Insights tab */
+.ins-bar-row{display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:3px}
+.ins-bar-label{width:130px;flex-shrink:0;color:#555;line-height:1.35}
+.ins-bar-track{flex:1;height:20px;background:#f2f1ed;border-radius:4px;overflow:hidden}
+.ins-bar-fill{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:7px;font-size:10px;font-weight:500;color:#fff;transition:width .6s ease}
+.ins-bar-meta{width:90px;text-align:right;color:#aaa;font-size:10px;flex-shrink:0}
+.upsell-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.upsell-card{background:#f8f7f3;border:1px solid #e5e2db;border-radius:8px;padding:.6rem .8rem}
+.upsell-tier{font-size:10px;font-weight:600;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px}
+.upsell-num{font-size:18px;font-weight:600;color:#185FA5}
+.upsell-sub{font-size:10px;color:#aaa;margin-top:1px}
+
+/* Alert guide tab */
+.guide-cat-header{display:inline-block;font-size:9px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#fff;border-radius:5px;padding:3px 10px;margin:1rem 0 .5rem}
+.guide-row{display:grid;grid-template-columns:150px 1fr 210px;gap:10px;align-items:start;padding:.6rem .85rem;border-radius:8px;border:0.5px solid #e5e2db;background:#fff;font-size:12px;margin-bottom:4px}
+.guide-name{font-weight:500;color:#111;line-height:1.5;font-size:12px}
+.guide-condition{font-size:12px;background:#f2f1ed;padding:3px 8px;border-radius:3px;color:#333;font-family:monospace;line-height:1.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.guide-why{margin-top:3px;color:#aaa;font-size:11px}
+.guide-threshold{font-size:11px;background:#FAEEDA;color:#854F0B;border-radius:8px;padding:3px 8px;font-weight:500;display:inline-block;text-align:right;line-height:1.5}
+
+/* Data cleansing tab */
+.dc-section{margin-bottom:1.5rem}
+.dc-section-title{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin-bottom:.6rem}
+.dc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.dc-card{background:#fff;border:1px solid #e5e2db;border-radius:10px;padding:.75rem 1rem}
+.dc-count{font-size:22px;font-weight:600;color:#A32D2D;line-height:1;margin-bottom:.3rem}
+.dc-name{font-size:12px;font-weight:500;color:#111;margin-bottom:.25rem;line-height:1.3}
+.dc-why{font-size:10px;color:#aaa;line-height:1.4}
+</style>
+</head>
+<body>
+
+<div class="page">
+<h1 class="page-title">Customer Success — Account Dashboard</h1>
+<p class="page-sub" id="page-sub">Drop your weekly xlsx to load</p>
+
+<div id="date-modal">
+  <div class="modal-box">
+    <div class="modal-title">When is this report from?</div>
+    <div class="modal-sub">Confirm the date — used to track weekly trends.</div>
+    <div class="modal-filename" id="modal-filename"></div>
+    <label class="modal-label">Report date</label>
+    <input type="date" class="modal-date" id="modal-date">
+    <div class="modal-btns">
+      <button class="modal-btn cancel" onclick="cancelUpload()">Cancel</button>
+      <button class="modal-btn confirm" onclick="confirmUpload()">Load dashboard</button>
+    </div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('dashboard')">Dashboard</div>
+  <div class="tab" onclick="switchTab('trials')">Trial Monitor <span class="tab-badge" id="trial-badge" style="display:none"></span></div>
+  <div class="tab" onclick="switchTab('insights')">Insights <span class="tab-badge" id="snap-badge" style="display:none"></span></div>
+  <div class="tab" onclick="switchTab('cleansing')">Data cleansing</div>
+  <div class="tab" onclick="switchTab('guide')">Guide</div>
+</div>
+
+<!-- ═══ DASHBOARD TAB ═══ -->
+<div class="tab-content active" id="tab-dashboard">
+  <div style="display:flex;align-items:center;gap:10px;padding:.6rem 1rem;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;margin-bottom:.6rem">
+    <span style="font-size:14px">👁</span>
+    <div><div style="font-size:12px;font-weight:600;color:#0F6E56">Read-only view</div>
+    <div id="viewer-status" style="font-size:11px;color:#555">Loading latest data…</div></div>
+  </div>
+
+  <div id="snapshots-bar"></div>
+
+  <div id="main-dashboard" style="display:none">
+    <!-- LEGEND + OEM FILTER (single row) -->
+    <!-- FILTERS ROW -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:6px;padding:.4rem .75rem;background:#fff;border:1.5px solid #c8c4bc;border-radius:8px">
+        <span style="font-size:11px;font-weight:600;color:#444;white-space:nowrap">OEM:</span>
+        <select id="dash-oem-filter" onchange="filterDashAlerts()" style="font-size:11px;padding:2px 6px;border:1px solid #ddd;border-radius:5px;background:#fff">
+          <option value="all">All OEMs</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;padding:.4rem .75rem;background:#fff;border:1.5px solid #c8c4bc;border-radius:8px">
+        <span style="font-size:11px;font-weight:600;color:#444;white-space:nowrap">Last activity:</span>
+        <select id="dash-lookback" onchange="filterDashAlerts()" style="font-size:11px;padding:2px 6px;border:1px solid #ddd;border-radius:5px;background:#fff">
+          <option value="30">1 month</option>
+          <option value="90">3 months</option>
+          <option value="180" selected>6 months</option>
+          <option value="270">9 months</option>
+          <option value="365">12 months</option>
+          <option value="99999">All time</option>
+        </select>
+      </div>
+      <span style="font-size:10px;color:#bbb;margin-left:2px">Alert counts update with both filters</span>
+    </div>
+    <!-- LEGEND -->
+    <div class="legend-strip" style="justify-content:flex-start">
+      <span class="leg-label">Row color &amp; flag dots:</span>
+      <div class="leg-item"><div class="leg-dot" style="background:#c0392b"></div>Churn risk</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#c68a00"></div>Inactive</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#1a5fa8"></div>Billing / upsell</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#aaa"></div>Ops / data quality</div>
+      <div style="flex:1"></div>
+      <div class="leg-sep"></div>
+      <span class="leg-label">TL score:</span>
+      <div class="leg-item"><div class="leg-dot" style="background:#1D9E75"></div>Low churn</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#EF9F27"></div>Mid churn</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#E24B4A"></div>High churn</div>
+    </div>
+
+    <div class="alerts-block">
+      <!-- CHURN RISK -->
+      <div class="alert-row">
+        <div class="row-pill pill-churn">Churn<br>risk</div>
+        <div class="cards-row">
+          <div class="acard c-r" id="card-stale-large" data-filter="stale_large" data-panel="panel-stale">
+            <div class="card-num" id="n-stale">—</div><div class="card-label">Large accounts — gone silent</div><div class="card-sub">51+ devices · no activity</div>
+          </div>
+          <div class="acard c-r" data-filter="declining" data-panel="panel-declining">
+            <div class="card-num" id="n-declining">—</div><div class="card-label">Small accounts — gone dark</div><div class="card-sub">≤50 devices · proven user · silent 30+ days</div>
+          </div>
+          <div class="acard c-r" data-filter="never_enrolled" data-panel="panel-never-enrolled">
+            <div class="card-num" id="n-never-enrolled">—</div><div class="card-label">Signed up — never started</div><div class="card-sub">0 devices · has contact info</div>
+          </div>
+          <div class="acard c-r" data-filter="trial_expiring" data-panel="panel-trial-expiring">
+            <div class="card-num" id="n-trial-expiring">—</div><div class="card-label">Trial — ending soon</div><div class="card-sub">Active trial · &lt;30 days left</div>
+          </div>
+        </div>
+      </div>
+      <!-- INACTIVE -->
+      <div class="alert-row">
+        <div class="row-pill pill-inactive">Inactive</div>
+        <div class="cards-row">
+          <div class="acard c-a" data-filter="enrolled_never">
+            <div class="card-num" id="n-never">—</div><div class="card-label">Accounts w. devices — no usage</div><div class="card-sub">Has devices · zero commands ever</div>
+          </div>
+          <div class="acard c-a" data-filter="low_cmd" data-panel="panel-lowcmd">
+            <div class="card-num" id="n-lowcmd">—</div><div class="card-label">Low usage</div><div class="card-sub">&lt; 2 commands per device</div>
+          </div>
+          <div class="acard c-a" data-filter="all_lowpriv" data-panel="panel-lowpriv">
+            <div class="card-num" id="n-lowpriv">—</div><div class="card-label">Limited accounts</div><div class="card-sub">All devices have limited permissions</div>
+          </div>
+          <div class="acard c-a" data-filter="single_dev" data-panel="panel-single">
+            <div class="new-badge">REVISED</div>
+            <div class="card-num" id="n-single">—</div><div class="card-label">Stalled after trial</div><div class="card-sub">1 device · no progress &lt;90d</div>
+          </div>
+        </div>
+      </div>
+      <!-- BILLING -->
+      <div class="alert-row">
+        <div class="row-pill pill-billing">Billing<br>upsell</div>
+        <div class="cards-row">
+          <div class="acard c-b" data-filter="large_limited">
+            <div class="card-num" id="n-llim">—</div><div class="card-label">Upsell opportunity</div><div class="card-sub">51+ devices · on limited plan</div>
+          </div>
+          <div class="acard c-b" data-filter="neg_cred">
+            <div class="card-num" id="n-negcred">—</div><div class="card-label">Negative credits</div><div class="card-sub">Billing anomaly</div>
+          </div>
+          <div class="acard c-b" data-filter="expiry_90" data-panel="panel-expiry">
+            <div class="card-num" id="n-expiry90">—</div><div class="card-label">Credits expiring — 90d</div><div class="card-sub">Credits budget ending within 90 days</div>
+          </div>
+          <div class="acard c-b" data-filter="expiry_30">
+            <div class="card-num" id="n-expiry30">—</div><div class="card-label">Credits expiring — 30d</div><div class="card-sub">Credits budget ending within 30 days</div>
+          </div>
+        </div>
+      </div>
+      <!-- BILLING ROW 2 -->
+      <div class="alert-row">
+        <div class="row-pill pill-billing" style="visibility:hidden"></div>
+        <div class="cards-row">
+          <div class="acard c-b" data-filter="renewal_exp90">
+            <div class="new-badge">NEW</div>
+            <div class="card-num" id="n-renewal90">—</div><div class="card-label">Agreement expiring — 90d</div><div class="card-sub">Agreement ending soon</div>
+          </div>
+          <div class="acard c-b" data-filter="renewal_expired">
+            <div class="new-badge">NEW</div>
+            <div class="card-num" id="n-renewal-exp">—</div><div class="card-label">Agreement expired</div><div class="card-sub">Agreement has lapsed</div>
+          </div>
+          <div class="acard placeholder"><div style="font-size:10px;color:#ccc;text-align:center">More signals<br>coming soon</div></div>
+          <div class="acard placeholder"><div style="font-size:10px;color:#ccc;text-align:center">More signals<br>coming soon</div></div>
+        </div>
+      </div>
+      <!-- OPS -->
+      <div class="alert-row">
+        <div class="row-pill pill-ops">Ops /<br>data</div>
+        <div class="cards-row">
+          <div class="acard c-g" data-filter="ghost" data-panel="panel-ghost">
+            <div class="card-num" id="n-ghost">—</div><div class="card-label">No contact info</div><div class="card-sub">0 devices · uncontactable</div>
+          </div>
+          <div class="acard c-g" data-filter="orphaned">
+            <div class="card-num" id="n-orphaned">—</div><div class="card-label">Orphaned accounts</div><div class="card-sub">No email, company or activity</div>
+          </div>
+          <div class="acard c-g" data-filter="large_no_cp" id="card-nocp">
+            <div class="card-num" id="n-nocp">—</div><div class="card-label">51+ · no channel partner</div><div class="card-sub" id="sub-nocp">Revenue unattributed</div>
+          </div>
+          <div class="acard placeholder"><div style="font-size:10px;color:#ccc;text-align:center">More signals<br>coming soon</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INSIGHT PANELS -->
+    <div class="insight-panel" id="panel-stale">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">Stale large accounts</span><span class="insight-sub">51+ devices · no activity on record</span></div><span class="insight-close" onclick="closePanel('panel-stale')">×</span></div><div style="font-size:11px;color:#555;line-height:1.6">Large deployments that have gone completely silent. Highest-value churn risk — call directly, do not email.</div></div>
+      <div class="insight-side"><div class="side-title">CS action</div><p>Call directly. Check if admin has changed, technical issue, or competitor move.</p></div>
+    </div>
+    <div class="insight-panel" id="panel-declining">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">Declining activity</span><span class="insight-sub" id="dec-sub"></span></div><span class="insight-close" onclick="closePanel('panel-declining')">×</span></div><div style="font-size:11px;color:#666;margin-bottom:.6rem">Days since last activity — accounts with proven past use now silent</div><div class="bar-rows" id="dec-bars"></div><div class="tbox amber" style="margin-top:.5rem"><div class="th-text"><strong>Threshold: 30+ days silent</strong> — past use proven, gone dark for a month.</div><div class="th-count amber" id="dec-count"></div></div></div>
+      <div class="insight-side"><div class="side-title">Note on login data</div><p>Uses last activity as proxy. Request <strong>login_count_last_30_days</strong> from data team for full accuracy.</p><div class="side-title" style="margin-top:.5rem">Breakdown</div><div class="side-stat"><span class="side-label">Active &lt;2 weeks</span><span class="side-val" id="dec-fresh">—</span></div><div class="side-stat"><span class="side-label">Active 2–4 weeks</span><span class="side-val" id="dec-mid">—</span></div><div class="side-stat"><span class="side-label">Silent 30+ days</span><span class="side-val" id="dec-old">—</span></div></div>
+    </div>
+    <div class="insight-panel" id="panel-never-enrolled">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">Never enrolled</span><span class="insight-sub" id="ne-sub"></span></div><span class="insight-close" onclick="closePanel('panel-never-enrolled')">×</span></div><div style="font-size:11px;color:#666;margin-bottom:.6rem">0 devices but CS has a contact signal — signed up, never set up.</div><div class="bar-rows" id="ne-bars"></div></div>
+      <div class="insight-side"><div class="side-title">Split logic</div><p style="margin-bottom:.5rem">Reachable = has email OR company OR activity date.</p><div class="side-stat"><span class="side-label">Never enrolled (reachable)</span><span class="side-val" id="ne-reach">—</span></div><div class="side-stat"><span class="side-label">Uncontactable (Ops row)</span><span class="side-val" id="ne-ghost">—</span></div></div>
+    </div>
+    <div class="insight-panel" id="panel-trial-expiring">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">Trial expiring soon</span><span class="insight-sub" id="te-sub"></span></div><span class="insight-close" onclick="closePanel('panel-trial-expiring')">×</span></div><div style="font-size:11px;color:#666;margin-bottom:.6rem">Active trials by days remaining</div><div class="bar-rows" id="te-bars"></div><div class="tbox red" style="margin-top:.5rem"><div class="th-text">Traffic light: &lt;30d = mid · &lt;15d = high · &lt;3d = critical</div></div></div>
+      <div class="insight-side"><div class="side-title">Urgency</div><div class="side-stat"><span class="side-label">Critical (&lt;3d)</span><span class="side-val" id="te-3">—</span></div><div class="side-stat"><span class="side-label">High (3–15d)</span><span class="side-val" id="te-15">—</span></div><div class="side-stat"><span class="side-label">Mid (15–30d)</span><span class="side-val" id="te-30">—</span></div><div class="side-stat"><span class="side-label">Total active trials</span><span class="side-val" id="te-total">—</span></div></div>
+    </div>
+    <div class="insight-panel" id="panel-lowcmd">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">Active but low commands</span><span class="insight-sub" id="lc-sub"></span></div><span class="insight-close" onclick="closePanel('panel-lowcmd')">×</span></div><div style="font-size:11px;color:#666;margin-bottom:.6rem">Commands per device — active accounts only</div><div class="bar-rows" id="lc-bars"></div><div class="tbox" style="margin-top:.5rem"><div class="th-text"><strong>&lt;2 cmd/device</strong> = bottom 50% of your active base.</div><div class="th-count" id="lc-count"></div></div></div>
+      <div class="insight-side"><div class="side-title">Active base</div><div class="side-stat"><span class="side-label">Active accounts</span><span class="side-val" id="lc-act">—</span></div><div class="side-stat"><span class="side-label">Median cmd/device</span><span class="side-val" id="lc-med">—</span></div><div class="side-stat"><span class="side-label">Below threshold</span><span class="side-val" id="lc-below">—</span></div></div>
+    </div>
+    <div class="insight-panel" id="panel-lowpriv">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">All devices have limited permissions</span><span class="insight-sub" id="lp-sub"></span></div><span class="insight-close" onclick="closePanel('panel-lowpriv')">×</span></div><div style="font-size:11px;color:#666;margin-bottom:.6rem">Every device lacks system permissions — product installed but unusable</div><div class="bar-rows" id="lp-bars"></div><div class="tbox amber" style="margin-top:.5rem"><div class="th-text"><strong>One CS call typically fixes this.</strong> Without permissions, app install, remote support and device settings are all blocked.</div><div class="th-count amber" id="lp-count"></div></div></div>
+      <div class="insight-side"><div class="side-title">Breakdown</div><div class="side-stat"><span class="side-label">All devices have limited permissions</span><span class="side-val" id="lp-all">—</span></div><div class="side-stat"><span class="side-label">Some devices low-priv</span><span class="side-val" id="lp-some">—</span></div><div class="side-stat"><span class="side-label">In trial + all low-priv</span><span class="side-val" id="lp-trial">—</span></div></div>
+    </div>
+    <div class="insight-panel" id="panel-single">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">Single-device accounts — revised</span><span class="insight-sub" id="sd-sub"></span></div><span class="insight-close" onclick="closePanel('panel-single')">×</span></div><div style="font-size:11px;color:#666;margin-bottom:.6rem">Trial ended within 90 days · only 1 device ever enrolled · no activity in 90+ days</div><div class="bar-rows" id="sd-bars"></div><div class="tbox amber" style="margin-top:.5rem"><div class="th-text"><strong>Definition:</strong> 1 device enrolled + trial ended 0–90 days ago + no activity for 90+ days. Beyond 90 days is excluded — not considered recoverable.</div></div></div>
+      <div class="insight-side"><div class="side-title">Why revised</div><p>Previously flagged all single-device accounts regardless of age. Now only shows accounts that stalled recently after trial — still actionable by CS.</p></div>
+    </div>
+    <div class="insight-panel" id="panel-expiry">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">Credits expiry</span><span class="insight-sub" id="exp-sub"></span></div><span class="insight-close" onclick="closePanel('panel-expiry')">×</span></div><div style="font-size:11px;color:#666;margin-bottom:.6rem">Days until credits run out</div><div class="bar-rows" id="exp-bars"></div><div class="tbox blue" style="margin-top:.5rem"><div class="th-text"><strong>Formula:</strong> where "days left" is empty → credits ÷ devices. Values &gt;3 years = no risk.</div></div></div>
+      <div class="insight-side"><div class="side-title">Breakdown</div><div class="side-stat"><span class="side-label">Expiring &lt;30d</span><span class="side-val" id="exp-30">—</span></div><div class="side-stat"><span class="side-label">30–60 days</span><span class="side-val" id="exp-60">—</span></div><div class="side-stat"><span class="side-label">60–90 days</span><span class="side-val" id="exp-90">—</span></div></div>
+    </div>
+    <div class="insight-panel" id="panel-ghost">
+      <div class="insight-main"><div class="insight-header"><div><span class="insight-title">Uncontactable ghost — OEM breakdown</span><span class="insight-sub" id="gh-sub"></span></div><span class="insight-close" onclick="closePanel('panel-ghost')">×</span></div><div style="font-size:11px;color:#666;margin-bottom:.6rem">0 devices · no email · no company · no activity</div><div class="bar-rows" id="gh-bars"></div></div>
+      <div class="insight-side"><div class="side-title">Why Ops row</div><p>No contact info — CS has nothing to call. Likely system-generated or OEM shells. 71% are OEM "undefined".</p><div class="side-stat"><span class="side-label">Total accounts</span><span class="side-val" id="gh-total">—</span></div><div class="side-stat"><span class="side-label">Uncontactable share</span><span class="side-val" id="gh-pct">—</span></div></div>
+    </div>
+
+    <!-- SILENCE STATS STRIP -->
+    <div id="silence-strip" class="legend-strip" style="display:none;margin-bottom:8px;background:#fff9f0;border-color:#fde8c8;font-size:11px;color:#555"></div>
+    <!-- TIER -->
+    <span class="sec-label">Device Tier Distribution</span>
+    <div class="tier-strip">
+      <div class="tier-card" data-filter="tier_0"><div class="tier-num" id="n-t0">—</div><div class="tier-sub">≤ 1 device</div></div>
+      <div class="tier-card" data-filter="tier_1"><div class="tier-num" id="n-t1">—</div><div class="tier-sub">2 – 10</div></div>
+      <div class="tier-card" data-filter="tier_2"><div class="tier-num" id="n-t2">—</div><div class="tier-sub">11 – 50</div></div>
+      <div class="tier-card" data-filter="tier_3"><div class="tier-num" id="n-t3">—</div><div class="tier-sub">51 – 100</div></div>
+      <div class="tier-card" data-filter="tier_4"><div class="tier-num" id="n-t4">—</div><div class="tier-sub">&gt; 100</div></div>
+    </div>
+
+    <!-- MAIN TABLE -->
+    <div class="tbl-header">
+      <div><div class="tbl-title" id="tbl-title">All accounts</div><div class="tbl-count" id="tbl-count"></div></div>
+      <div class="tbl-ctrl">
+        <input type="text" id="search" placeholder="Search domain, company, country…" oninput="applyFilters()">
+        <button class="btn" onclick="clearAll()">Show all</button>
+        <button class="btn green" onclick="document.getElementById('file-input').click()">↑ Load new xlsx</button>
+      </div>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th onclick="sortBy('d')" style="width:120px">Domain <span class="sarr" id="s-d">↕</span></th>
+          <th onclick="sortBy('co')" style="width:100px">Company <span class="sarr" id="s-co">↕</span></th>
+          <th onclick="sortBy('ct')">Country <span class="sarr" id="s-ct">↕</span></th>
+          <th onclick="sortBy('created')">Created <span class="sarr" id="s-created">↕</span></th>
+          <th onclick="sortBy('email')">Email <span class="sarr" id="s-email">↕</span></th>
+          <th onclick="sortBy('oem')">OEM <span class="sarr" id="s-oem">↕</span></th>
+          <th onclick="sortBy('dev')">Devices <span class="sarr" id="s-dev">↕</span></th>
+          <th>Trial</th>
+          <th onclick="sortBy('trDays')">Trial days <span class="sarr" id="s-trDays">↕</span></th>
+          <th onclick="sortBy('cr')">Credits <span class="sarr" id="s-cr">↕</span></th>
+          <th onclick="sortBy('daysLeft')">Days left <span class="sarr" id="s-daysLeft">↕</span></th>
+          <th onclick="sortBy('la')">Last activity <span class="sarr" id="s-la">↕</span></th>
+          <th>Limited</th>
+          <th onclick="sortBy('cmd')">Commands <span class="sarr" id="s-cmd">↕</span></th>
+          <th onclick="sortBy('cpd')">Cmd/dev <span class="sarr" id="s-cpd">↕</span></th>
+          <th>TL</th>
+        </tr></thead>
+        <tbody id="tbl-body"></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button class="pbtn" id="prev-btn" onclick="changePage(-1)">← Prev</button>
+      <span id="page-info"></span>
+      <button class="pbtn" id="next-btn" onclick="changePage(1)">Next →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TRIAL MONITOR TAB ═══ -->
+<div class="tab-content" id="tab-trials">
+  <div id="trial-empty" style="text-align:center;padding:3rem;color:#aaa">
+    <div style="font-size:32px;margin-bottom:.75rem">🔬</div>
+    <div style="font-size:14px;font-weight:500;color:#888;margin-bottom:.35rem">Trial Monitor</div>
+    <div style="font-size:12px">Load your weekly xlsx to see all active trials with traffic light scoring</div>
+  </div>
+  <div id="trial-content" style="display:none">
+    <!-- Summary cards -->
+    <div class="trial-summary">
+      <div class="ts-card red"   style="cursor:pointer" onclick="setTrialTL('red')"   title="Filter to High churn only"><div class="ts-num" id="tm-red">—</div><div class="ts-label">High churn risk</div></div>
+      <div class="ts-card amber" style="cursor:pointer" onclick="setTrialTL('amber')" title="Filter to Mid churn only"><div class="ts-num" id="tm-amber">—</div><div class="ts-label">Mid churn risk</div></div>
+      <div class="ts-card green" style="cursor:pointer" onclick="setTrialTL('green')" title="Filter to Low churn only"><div class="ts-num" id="tm-green">—</div><div class="ts-label">Low churn risk</div></div>
+      <div class="ts-card" style="cursor:pointer" onclick="setTrialTL('all')" title="Show all"><div class="ts-num" id="tm-total">—</div><div class="ts-label">Total active trials</div></div>
+      <div class="ts-card" style="cursor:pointer" onclick="setTrialNoDev()" title="Filter to 0 devices enrolled"><div class="ts-num" id="tm-nodev">—</div><div class="ts-label">0 devices enrolled</div></div>
+    </div>
+    <!-- Filters -->
+    <div class="trial-filters">
+      <span style="font-size:11px;font-weight:500;color:#555">Filter:</span>
+      <select class="filter-sel" id="tm-tl-filter" onchange="renderTrialTable()">
+        <option value="all">All TL scores</option>
+        <option value="red">🔴 High churn only</option>
+        <option value="amber">🟡 Mid churn only</option>
+        <option value="green">🟢 Low churn only</option>
+      </select>
+      <select class="filter-sel" id="tm-oem-filter" onchange="renderTrialTable()">
+        <option value="all">All OEMs</option>
+      </select>
+      <input type="text" id="tm-search" placeholder="Search domain, company…" oninput="renderTrialTable()" style="width:180px">
+      <button class="btn" onclick="resetTrialFilters()">Reset</button>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th onclick="sortTrial('tl_order')">TL <span class="sarr" id="ts-tl">↕</span></th>
+          <th onclick="sortTrial('d')">Domain <span class="sarr" id="ts-d">↕</span></th>
+          <th onclick="sortTrial('co')">Company <span class="sarr" id="ts-co">↕</span></th>
+          <th onclick="sortTrial('email')">Email <span class="sarr" id="ts-email">↕</span></th>
+          <th onclick="sortTrial('oem')">OEM <span class="sarr" id="ts-oem">↕</span></th>
+          <th onclick="sortTrial('daysIntoTrial')">Days into trial <span class="sarr" id="ts-dit">↕</span></th>
+          <th onclick="sortTrial('trDays')">Days left <span class="sarr" id="ts-trd">↕</span></th>
+          <th onclick="sortTrial('dev')">Devices <span class="sarr" id="ts-dev">↕</span></th>
+          <th onclick="sortTrial('cmd')">Commands <span class="sarr" id="ts-cmd">↕</span></th>
+          <th onclick="sortTrial('lowP')">Low-priv dev <span class="sarr" id="ts-lp">↕</span></th>
+          <th onclick="sortTrial('la')">Last activity <span class="sarr" id="ts-la">↕</span></th>
+          <th onclick="sortTrial('ct')">Country <span class="sarr" id="ts-ct">↕</span></th>
+        </tr></thead>
+        <tbody id="trial-body"></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button class="pbtn" id="tm-prev" onclick="changeTrialPage(-1)">← Prev</button>
+      <span id="tm-page-info"></span>
+      <button class="pbtn" id="tm-next" onclick="changeTrialPage(1)">Next →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ INSIGHTS TAB ═══ -->
+<div class="tab-content" id="tab-insights">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:.65rem 1rem;background:#fff;border:1px solid #e5e2db;border-radius:10px;margin-bottom:1rem">
+    <span style="font-size:11px;font-weight:500;color:#555">Filter by OEM:</span>
+    <select id="oem-filter" onchange="buildTestTab(allData,this.value)"><option value="all">All OEMs</option></select>
+    <span style="font-size:11px;color:#aaa;margin-left:auto">Updates when you load a new xlsx</span>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:1rem">
+    <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem">
+      <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.6rem;display:flex;align-items:baseline">Activation funnel <span style="font-size:10px;color:#aaa;font-style:italic;font-weight:400;margin-left:auto">% of total accounts</span></div>
+      <div id="ins-funnel"></div>
+    </div>
+    <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem">
+      <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.6rem;display:flex;align-items:baseline">Plan type split <span style="font-size:10px;color:#aaa;font-style:italic;font-weight:400;margin-left:auto">active accounts only</span></div>
+      <div style="font-size:10px;color:#aaa;margin-bottom:.4rem" id="ins-plan-sub"></div>
+      <div id="ins-plan"></div>
+    </div>
+    <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem">
+      <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.6rem;display:flex;align-items:baseline">Usage by account size <span style="font-size:10px;color:#aaa;font-style:italic;font-weight:400;margin-left:auto">% with commands</span></div>
+      <div id="ins-size"></div>
+    </div>
+  </div>
+
+  <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem;margin-bottom:1rem">
+    <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.4rem;display:flex;align-items:baseline">Limited plan but active — upsell targets <span style="font-size:10px;color:#aaa;font-style:italic;font-weight:400;margin-left:auto">by account size · filtered by OEM selector above</span></div>
+    <div class="upsell-grid" id="ins-upsell"></div>
+    <div style="font-size:10px;color:#aaa;margin-top:.5rem">On a limited plan but genuinely using the product — warmest upsell leads for CS and account management.</div>
+  </div>
+
+  <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem;margin-bottom:1rem">
+    <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.65rem">OEM breakdown <span style="font-size:10px;color:#aaa;font-weight:400;font-style:italic;margin-left:8px">from latest upload</span></div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;overflow:hidden" id="pie-grid"><div class="info-note">Load your xlsx to see charts</div></div>
+    <div id="pie-drilldown" style="display:none;margin-top:10px;background:#fff;border:1px solid #e5e2db;border-radius:10px;overflow:hidden"></div>
+  </div>
+
+  <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem;margin-bottom:1rem">
+    <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.65rem">Weekly trend lines <span style="font-size:10px;color:#aaa;font-weight:400;font-style:italic;margin-left:8px">load 2+ weekly files to compare</span></div>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:.75rem;flex-wrap:wrap">
+      <span style="font-size:11px;color:#555">Date range:</span>
+      <select id="date-from" onchange="buildTestTab(allData,document.getElementById('oem-filter').value)"><option value="">From — all</option></select>
+      <span style="font-size:12px;color:#aaa">to</span>
+      <select id="date-to" onchange="buildTestTab(allData,document.getElementById('oem-filter').value)"><option value="">To — all</option></select>
+      <button class="btn" onclick="document.getElementById('date-from').value='';document.getElementById('date-to').value='';buildTestTab(allData,document.getElementById('oem-filter').value)" style="margin-left:auto">Reset</button>
+    </div>
+    <div id="trend-charts-block" style="overflow:hidden"><div class="info-note">Load 2 or more weekly files to see trend lines</div></div>
+    <div style="margin-top:1.5rem">
+      <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin-bottom:.5rem">Loaded snapshots</div>
+      <div class="tbl-wrap"><table class="snap-tbl">
+        <thead><tr><th>Date</th><th>Filename</th><th>Accounts</th><th>Stale large</th><th>Declining</th><th>Renewals expired</th><th>Expiring 30d</th><th></th></tr></thead>
+        <tbody id="snap-tbl-body"></tbody>
+      </table></div>
+    </div>
+  </div>
+  <div id="ins-drilldown" style="display:none;background:#fff;border:1px solid #e5e2db;border-radius:10px;overflow:hidden;margin-top:10px"></div>
+</div>
+
+<!-- ═══ DATA CLEANSING TAB ═══ -->
+<div class="tab-content" id="tab-cleansing">
+  <div style="background:#fff8f0;border:1px solid #fde8c8;border-radius:10px;padding:.75rem 1rem;margin-bottom:1rem;font-size:11px;color:#666;line-height:1.65">
+    These accounts have data quality or reachability issues. They are <strong>excluded from all Dashboard alert counts</strong> and should be passed to the <strong>data/ops team</strong>, not CS.
+  </div>
+  <div id="dc-content"><div class="info-note">Load your xlsx to see data cleansing analysis</div></div>
+</div>
+
+<!-- ═══ ALERT GUIDE TAB ═══ -->
+<div class="tab-content" id="tab-guide">
+  <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1.1rem;margin-bottom:1rem;font-size:11px;color:#666;line-height:1.65">
+    Each alert below shows its exact conditions and current threshold. These can be adjusted — contact the dashboard owner to change a threshold.
+  </div>
+  <div id="guide-churn"></div>
+  <div id="guide-inactive"></div>
+  <div id="guide-billing"></div>
+  <div style="margin-top:1.5rem">
+    <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin-bottom:.6rem">TL Score — churn risk colour coding</div>
+    <div id="guide-tl"></div>
+  </div>
+  <div style="margin-top:1.5rem">
+    <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin-bottom:.6rem">Global exclusions (applied before all counts)</div>
+    <div id="guide-exclusions"></div>
+  </div>
+  <div style="margin-top:1.5rem">
+    <div style="font-size:9px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#fff;background:#534AB7;border-radius:5px;padding:3px 10px;display:inline-block;margin-bottom:.6rem">Pending — activate next week</div>
+    <div id="guide-pending"></div>
+  </div>
+</div>
+
+</div>
+
+
+
+<script>
+/* ═══ CONSTANTS ═══ */
+const PAGE=50, TRIAL_PAGE=50;
+const LOW_CMD=2, DECLINE_DAYS=30, EXPIRY_CAP=1095, SINGLE_DEV_DAYS=90;
+const EXCLUDE_COUNTRY='ghana';
+const TODAY=new Date('2026-05-10');
+const LS_KEY='cs_dash_v7';
+/* ═══ SUPABASE ═══ */
+const SUPA_URL='https://pkyngucjjcdukfhhqysh.supabase.co';
+const SUPA_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBreW5ndWNqamNkdWtmaGhxeXNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1Njg3NjEsImV4cCI6MjA5NDE0NDc2MX0.r-mYmlOJ6__obtUAGV-2Ad92tA7Vu4jzImwrtwEKxKk';
+const SUPA_HDR={'apikey':SUPA_ANON,'Authorization':'Bearer '+SUPA_ANON,'Content-Type':'application/json'};
+
+async function loadSnaps(){
+  try{
+    const r=await fetch(SUPA_URL+'/rest/v1/snapshots?select=snap_data&order=report_date.asc',{headers:SUPA_HDR});
+    const d=await r.json();
+    if(Array.isArray(d))snapshots=d.map(x=>x.snap_data).filter(Boolean);
+    else snapshots=[];
+  }catch(e){console.error('loadSnaps:',e);snapshots=[];}
+}
+
+async function saveSnaps(){} // viewer: read-only
+
+async function deleteSnapRemote(date){
+  await fetch(SUPA_URL+'/rest/v1/snapshots?report_date=eq.'+encodeURIComponent(date),{
+    method:'DELETE',headers:SUPA_HDR
+  });
+}
+
+
+/* ═══ ALERT DEFINITIONS ═══ */
+const ALERTS=[
+  {key:'stale_large',    label:'Large accounts — gone silent', cat:'churn'},
+  {key:'declining',      label:'Small accounts — gone dark',  cat:'churn'},
+  {key:'never_enrolled', label:'Signed up — never started', cat:'churn'},
+  {key:'trial_expiring', label:'Trial — ending soon',        cat:'churn'},
+  {key:'enrolled_never', label:'Accounts w. devices — no usage',cat:'inactive'},
+  {key:'low_cmd',        label:'Low usage',                cat:'inactive'},
+  {key:'all_lowpriv',    label:'Limited accounts',          cat:'inactive'},
+  {key:'single_dev',     label:'Stalled after trial',      cat:'inactive'},
+  {key:'large_limited',  label:'Upsell opportunity',       cat:'billing'},
+  {key:'neg_cred',       label:'Negative credits',         cat:'billing'},
+  {key:'expiry_90',      label:'Credits expiring — 90d',   cat:'billing'},
+  {key:'expiry_30',      label:'Credits expiring — 30d',   cat:'billing'},
+  {key:'renewal_exp90',  label:'Agreement expiring — 90d',    cat:'billing'},
+  {key:'renewal_expired',label:'Agreement expired',           cat:'billing'},
+  {key:'ghost',          label:'No contact info',          cat:'ops'},
+  {key:'orphaned',       label:'Orphaned accounts',        cat:'ops'},
+  {key:'large_no_cp',    label:'Missing channel partner',  cat:'ops'},
+];
+const FLAG_META={
+  stale_large:{label:'Large accounts — gone silent',dot:'fd-r'},declining:{label:'Small accounts — gone dark',dot:'fd-r'},
+  never_enrolled:{label:'Signed up — never started',dot:'fd-r'},trial_expiring:{label:'Trial — ending soon',dot:'fd-r'},
+  enrolled_never:{label:'Accounts w. devices — no usage',dot:'fd-a'},low_cmd:{label:'Low usage',dot:'fd-a'},
+  all_lowpriv:{label:'Limited accounts',dot:'fd-a'},single_dev:{label:'Stalled after trial',dot:'fd-a'},
+  large_limited:{label:'Upsell opportunity',dot:'fd-b'},neg_cred:{label:'Negative credits',dot:'fd-b'},
+  expiry_90:{label:'Credits expiring — 90d',dot:'fd-b'},expiry_30:{label:'Credits expiring — 30d',dot:'fd-b'},
+  renewal_exp90:{label:'Agreement expiring — 90d',dot:'fd-b'},renewal_expired:{label:'Agreement expired',dot:'fd-b'},
+  ghost:{label:'No contact info',dot:'fd-g'},orphaned:{label:'Orphaned accounts',dot:'fd-g'},large_no_cp:{label:'Missing channel partner',dot:'fd-g'},
+};
+const TIER_FN={tier_0:r=>r.dev<=1,tier_1:r=>r.dev>=2&&r.dev<=10,tier_2:r=>r.dev>=11&&r.dev<=50,tier_3:r=>r.dev>=51&&r.dev<=100,tier_4:r=>r.dev>100};
+const CAT_COLORS={churn:['#e24b4a','#c0392b','#e9595a','#d45050'],inactive:['#c68a00','#e5a020','#8a6800','#a07000'],billing:['#1a5fa8','#2980d4','#378ADD','#185FA5','#5ba3e0','#3d7fc0'],ops:['#aaa','#999','#bbb']};
+const PIE_COLORS=['#378ADD','#E24B4A','#EF9F27','#1D9E75','#7F77DD','#B4B2A9','#F09595','#9FE1CB'];
+
+/* ═══ STATE ═══ */
+let allData=[],filtered=[],activeFilter=null,sortKey='dev',sortDir=-1,page=0;
+let trialData=[],trialFiltered=[],trialSortKey='tl_order',trialSortDir=1,trialPage=0;
+let pendingFile=null,pendingFilename='';
+let snapshots=[],chartInstances={};
+let _buildTestTabLock=false;
+function destroyCharts(prefix){
+  Object.keys(chartInstances).forEach(k=>{
+    if(!prefix||k.startsWith(prefix)){
+      try{chartInstances[k].destroy();}catch(e){}
+      delete chartInstances[k];
+    }
+  });
+}
+function safeChart(id,config){
+  const canvas=document.getElementById(id);
+  if(!canvas)return null;
+  const existing=Chart.getChart(canvas);
+  if(existing)try{existing.destroy();}catch(e){}
+  try{return new Chart(canvas.getContext('2d'),config);}catch(e){console.warn('Chart fail',id,e);return null;}
+}
+
+/* ═══ STORAGE ═══ */
+// loadSnaps now defined via Supabase block above
+// saveSnaps now async via Supabase
+function clearAllSnaps(){if(!confirm('Delete all saved snapshots?'))return;snapshots=[];saveSnaps();renderSnapsBar();renderTrends();}
+
+/* ═══ TABS ═══ */
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));
+  document.querySelector(`.tab[onclick="switchTab('${t}')"]`).classList.add('active');
+  document.getElementById('tab-'+t).classList.add('active');
+  if(t==='insights'){if(allData.length)buildTestTab(allData,document.getElementById('oem-filter')?.value||'all');}
+  if(t==='trials')renderTrialTable();
+  if(t==='cleansing')renderCleansing();
+  if(t==='guide')renderGuide();
+}
+
+/* ═══ DROP ZONE ═══ */
+const dz=document.getElementById('drop-zone');
+let _dragDepth=0;
+function attachDrag(el){
+  el.addEventListener('dragenter',e=>{e.preventDefault();_dragDepth++;el.classList.add('drag-over');});
+  el.addEventListener('dragleave',e=>{e.preventDefault();if(--_dragDepth<=0){_dragDepth=0;el.classList.remove('drag-over');}});
+  el.addEventListener('dragover',e=>{e.preventDefault();});
+  el.addEventListener('drop',e=>{e.preventDefault();_dragDepth=0;el.classList.remove('drag-over');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
+}
+attachDrag(dz);
+function handleFile(f){
+  pendingFile=f;pendingFilename=f.name;
+  const m=f.name.match(/(\d{4})(\d{2})(\d{2})/);
+  document.getElementById('modal-filename').textContent='📄 '+f.name;
+  document.getElementById('modal-date').value=m?`${m[1]}-${m[2]}-${m[3]}`:'';
+  document.getElementById('date-modal').classList.add('visible');
+}
+function cancelUpload(){pendingFile=null;document.getElementById('date-modal').classList.remove('visible');}
+function confirmUpload(){
+  const dv=document.getElementById('modal-date').value;
+  if(!dv){alert('Please select a date.');return;}
+  document.getElementById('date-modal').classList.remove('visible');
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+      let sn=wb.SheetNames[0];
+      for(const s of wb.SheetNames){try{const r=XLSX.utils.decode_range(wb.Sheets[s]['!ref']||'A1');if(r.e.r>100){sn=s;break;}}catch(e){}}
+      processData(XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:null,raw:false}),pendingFilename,dv);
+    }catch(err){alert('Error: '+err.message);}
+  };
+  reader.readAsArrayBuffer(pendingFile);
+}
+
+/* ═══ HELPERS ═══ */
+function pn(v){if(v===null||v===undefined||v==='')return null;const n=parseFloat(String(v).replace(/,/g,''));return isNaN(n)?null:n;}
+function pd(v){if(!v)return null;if(v instanceof Date)return isNaN(v.getTime())?null:v;try{const d=new Date(v);return isNaN(d.getTime())?null:d;}catch(e){return null;}}
+function cl(v){if(v===null||v===undefined)return '';const s=String(v).trim();return(s===''||s==='nan'||s.toLowerCase()==='undefined'||s.toLowerCase()==='null')?'':s;}
+function setText(id,val){const el=document.getElementById(id);if(el)el.textContent=val;}
+
+/* ═══ TRAFFIC LIGHT ═══ */
+function tlScore(dev,cmd,cpd,daysSince,allLP,trDays,trialActive){
+  if(dev===0){
+    // Trial phase, 0 devices
+    if(trialActive&&trDays!==null){
+      if(trDays<=15) return 'red';
+      if(trDays<=27) return 'amber';
+      return 'green';
+    }
+    return 'grey';
+  }
+  if(allLP||(cmd===0&&dev>0)) return 'red';
+  const large=dev>500,medium=dev>100&&dev<=500;
+  // Trial phase with devices
+  if(trialActive&&trDays!==null){
+    if(trDays<=15&&(daysSince===null||daysSince>5)) return 'red';
+    if(daysSince!==null&&daysSince<=5) return 'green'; // recently active = green
+    if(trDays<=27) return 'amber';
+    return 'green';
+  }
+  // Post-trial
+  if(large){if(daysSince!==null&&daysSince>=14)return 'red';if(daysSince!==null&&daysSince<=3&&cpd>=5)return 'green';}
+  else if(medium){if(daysSince!==null&&daysSince>=30)return 'red';if(daysSince!==null&&daysSince<=7&&cpd>=3)return 'green';}
+  else{if(daysSince!==null&&daysSince>=90)return 'red';if(daysSince!==null&&daysSince<=14&&cpd>=2)return 'green';}
+  return 'amber';
+}
+const TL_ORDER={red:0,amber:1,green:2,grey:3};
+
+/* ═══ DATA PROCESSING ═══ */
+function processData(raw,filename,dateStr){
+  _buildTestTabLock=false; // always reset in case previous run left lock stuck
+  window._hasCPData=raw.some(r=>{const v=r['channel partner'];return v&&String(v).trim()&&String(v).trim().toLowerCase()!=='nan';});
+  const processed=[],oemCount={},ghostOEM={},negOEM={},oneDevOEM={};
+  for(const r of raw){
+    const get=(...keys)=>{for(const k of Object.keys(r)){const kl=k.toLowerCase();if(keys.some(t=>kl.includes(t)))return r[k];}return null;};
+    const domain=cl(get('domain'));if(!domain)continue;
+    const ct=cl(get('country'));
+    if(ct.toLowerCase()===EXCLUDE_COUNTRY)continue;
+    const dev    =pn(get('num of devices','devices'))||0;
+    const cr     =pn(get('credits'));
+    const cmd    =pn(get('num commands','commands'))||0;
+    const oem    =cl(get('oem'))||'undefined';
+    const co     =cl(get('company'));
+    const cp     =cl(get('channel partner'));
+    const email  =cl(get('admin email','email'));
+    const lim    =cl(get('limited')).toLowerCase()==='true';
+    const tr     =cl(get('trial?','trial')).toLowerCase()==='true';
+    const te     =pd(get('taril end','trial end'));
+    const ts     =pd(get('trail start','trial start'));
+    const la     =pd(get('last activity'));
+    const trDays =pn(get('trails days left','trial days'));
+    const dlRaw  =pn(get('days left'));
+    const lowP   =pn(get('is device low priv'))||0;
+    const created=pd(get('create date'));
+    const smartExp=pd(get('smart expire date'));
+    const andD   =pn(get('android'))||0;
+    const winD   =pn(get('windows'))||0;
+
+    const cpd         =dev>0?cmd/dev:0;
+    const daysSince   =la?Math.floor((TODAY-la)/86400000):null;
+    const daysSinceTE =te?Math.floor((TODAY-te)/86400000):null;
+    const daysIntoTrial=ts?Math.floor((TODAY-ts)/86400000):null;
+    const daysToSmartExp=smartExp?Math.floor((smartExp-TODAY)/86400000):null;
+    const allLP       =dev>0&&lowP>=dev;
+    const someLP      =dev>0&&lowP>0&&lowP<dev;
+    const hasContact  =!!email||!!co||!!la;
+    const noCP        =!cp||['nan',''].includes(cp.toLowerCase());
+    const trialActive =tr&&trDays!==null&&trDays>0;
+
+    // compute days_left
+    let daysLeft=dlRaw;
+    if((daysLeft===null||isNaN(daysLeft))&&cr>0&&dev>0)daysLeft=cr/dev;
+    if(daysLeft>EXPIRY_CAP)daysLeft=null;
+
+    // flags
+    const flags=[];
+    if(dev>=51&&la&&daysSince!==null&&daysSince>30)                  flags.push('stale_large');
+    if(dev>0&&dev<=50&&cmd>0&&daysSince!==null&&daysSince>=DECLINE_DAYS) flags.push('declining');
+    if(dev===0&&hasContact)                                          flags.push('never_enrolled');
+    if(trialActive&&trDays<=30)                                      flags.push('trial_expiring');
+    if(dev>0&&cmd===0)                                               flags.push('enrolled_never');
+    if(dev>0&&cmd>0&&la&&cpd<LOW_CMD)                               flags.push('low_cmd');
+    if(allLP)                                                        flags.push('all_lowpriv');
+    // revised single_dev: 1 device + trial ended 0-90d ago + no activity 90+d
+    if(dev===1&&daysSinceTE!==null&&daysSinceTE>=0&&daysSinceTE<=SINGLE_DEV_DAYS&&(la===null||daysSince>=90)) flags.push('single_dev');
+    if(dev>=51&&lim)                                                 flags.push('large_limited');
+    if(cr!==null&&cr<0)                                              flags.push('neg_cred');
+    if(daysLeft!==null&&daysLeft>0&&daysLeft<=90)                   flags.push('expiry_90');
+    if(daysLeft!==null&&daysLeft>0&&daysLeft<=30)                   flags.push('expiry_30');
+    if(daysToSmartExp!==null&&daysToSmartExp>0&&daysToSmartExp<=90) flags.push('renewal_exp90');
+    if(smartExp&&smartExp<TODAY)                                     flags.push('renewal_expired');
+    if(dev===0&&!hasContact){flags.push('ghost');ghostOEM[oem]=(ghostOEM[oem]||0)+1;}
+    if(!email&&!co&&!la)                                             flags.push('orphaned');
+    if(dev>=51&&noCP&&window._hasCPData)                              flags.push('large_no_cp');
+
+    oemCount[oem]=(oemCount[oem]||0)+1;
+    if(cr!==null&&cr<0)negOEM[oem]=(negOEM[oem]||0)+1;
+    if(flags.includes('single_dev'))oneDevOEM[oem]=(oneDevOEM[oem]||0)+1;
+
+    const tl=tlScore(dev,cmd,Math.round(cpd*10)/10,daysSince,allLP,trDays,trialActive);
+
+    processed.push({
+      d:domain.slice(0,28),co:co.slice(0,18),ct:ct.slice(0,20),
+      email:email.slice(0,45),oem,dev,cr,cmd,
+      cpd:Math.round(cpd*10)/10,lim,tr,
+      te:te?te.toISOString().slice(0,10):'',
+      trDays,la:la?la.toISOString().slice(0,10):'',
+      created:created?created.toISOString().slice(0,10):'',
+      daysLeft:daysLeft?Math.round(daysLeft):null,
+      daysSince,daysIntoTrial,daysToSmartExp,
+      allLP,someLP,lowP,tl,tl_order:TL_ORDER[tl]??3,f:flags,
+      and:Math.round(andD),win:Math.round(winD)
+    });
+  }
+  allData=processed;
+  trialData=allData.filter(r=>r.tr&&r.trDays!==null&&r.trDays>0);
+
+  // counts — dead accounts excluded (no last activity OR last activity > 6 months ago)
+  const DEAD_FILTER=r=>r.la&&r.daysSince!==null&&r.daysSince<=180;
+  const counts={};ALERTS.forEach(a=>counts[a.key]=0);
+  ['tier_0','tier_1','tier_2','tier_3','tier_4'].forEach(k=>counts[k]=0);
+  let cpdVals=[],someLPCount=0,allLPTrialCount=0;
+  for(const r of allData){
+    if(DEAD_FILTER(r))r.f.forEach(f=>{if(counts[f]!==undefined)counts[f]++;});
+    if(r.dev<=1)counts.tier_0++;else if(r.dev<=10)counts.tier_1++;else if(r.dev<=50)counts.tier_2++;else if(r.dev<=100)counts.tier_3++;else counts.tier_4++;
+    if(r.dev>0&&r.cmd>0&&r.la)cpdVals.push(r.cpd);
+    if(r.someLP)someLPCount++;
+    if(r.allLP&&r.tr)allLPTrialCount++;
+  }
+  const sortedCpd=[...cpdVals].sort((a,b)=>a-b);
+  const median=sortedCpd.length?sortedCpd[Math.floor(sortedCpd.length/2)]:0;
+
+  // update cards
+  const idMap={stale_large:'n-stale',declining:'n-declining',never_enrolled:'n-never-enrolled',trial_expiring:'n-trial-expiring',enrolled_never:'n-never',low_cmd:'n-lowcmd',all_lowpriv:'n-lowpriv',single_dev:'n-single',large_limited:'n-llim',neg_cred:'n-negcred',expiry_90:'n-expiry90',expiry_30:'n-expiry30',renewal_exp90:'n-renewal90',renewal_expired:'n-renewal-exp',ghost:'n-ghost',orphaned:'n-orphaned',large_no_cp:'n-nocp'};
+  Object.entries(idMap).forEach(([k,id])=>{const el=document.getElementById(id);if(el)el.textContent=counts[k].toLocaleString();});
+  ['t0','t1','t2','t3','t4'].forEach((t,i)=>{const el=document.getElementById('n-'+t);if(el)el.textContent=counts['tier_'+i].toLocaleString();});
+
+  // Trial monitor summary
+  const tmRed=trialData.filter(r=>r.tl==='red').length;
+  const tmAmber=trialData.filter(r=>r.tl==='amber').length;
+  const tmGreen=trialData.filter(r=>r.tl==='green').length;
+  const tmNoDev=trialData.filter(r=>r.dev===0).length;
+  setText('tm-red',tmRed.toLocaleString());
+  setText('tm-amber',tmAmber.toLocaleString());
+  setText('tm-green',tmGreen.toLocaleString());
+  setText('tm-total',trialData.length.toLocaleString());
+  setText('tm-nodev',tmNoDev.toLocaleString());
+  const badge=document.getElementById('trial-badge');
+  badge.textContent=trialData.length;badge.style.display='';
+  // populate trial OEM filter
+  const tmOEMSel=document.getElementById('tm-oem-filter');
+  const capO2=o=>o?o[0].toUpperCase()+o.slice(1):o;
+  const tmOemCount={};trialData.forEach(r=>{tmOemCount[r.oem]=(tmOemCount[r.oem]||0)+1;});
+  tmOEMSel.innerHTML='<option value="all">All OEMs</option>'+
+    Object.entries(tmOemCount).filter(([,n])=>n>=5).sort((a,b)=>capO2(a[0]).localeCompare(capO2(b[0])))
+    .map(([o,n])=>`<option value="${o}">${capO2(o)} (${n})</option>`).join('');
+
+  // insight panels — computed in buildInsights() so OEM filter updates them too
+
+  // save snapshot
+  const snap={date:dateStr,filename,total:allData.length,counts:{...counts},
+    oemCounts:Object.fromEntries(Object.entries(oemCount).sort((a,b)=>b[1]-a[1]).slice(0,10)),
+    ghostOEM:Object.fromEntries(Object.entries(ghostOEM).sort((a,b)=>b[1]-a[1]).slice(0,8)),
+    negOEM:Object.fromEntries(Object.entries(negOEM).sort((a,b)=>b[1]-a[1]).slice(0,8)),
+    oneDevOEM:Object.fromEntries(Object.entries(oneDevOEM).sort((a,b)=>b[1]-a[1]).slice(0,8))};
+  const idx=snapshots.findIndex(s=>s.date===dateStr);
+  if(idx>=0)snapshots[idx]=snap;else snapshots.push(snap);
+  snapshots.sort((a,b)=>a.date.localeCompare(b.date));
+  saveSnaps().catch(e=>console.error('Save failed:',e));
+
+  dz.classList.add('loaded');
+  dz.innerHTML=`<div style="display:flex;align-items:center;gap:12px;padding:.5rem .75rem;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;flex-wrap:wrap">
+    <span style="font-size:12px;color:#0F6E56;font-weight:500">✓ ${filename} (${dateStr}) — ${allData.length.toLocaleString()} accounts</span>
+    <button id="load-btn" style="font-size:11px;font-weight:600;padding:5px 14px;border-radius:6px;border:1.5px solid #0F6E56;background:#fff;color:#0F6E56;cursor:pointer;white-space:nowrap">⬆ Load new file</button>
+    <span style="font-size:10px;color:#aaa">or drag &amp; drop</span>
+  </div><input type="file" id="file-input" accept=".xlsx,.xls,.csv" onchange="handleFile(this.files[0])" style="display:none">`;
+  document.getElementById('load-btn').addEventListener('click',e=>{e.stopPropagation();document.getElementById('file-input').click();});
+  _dragDepth=0;attachDrag(dz);
+  document.getElementById('page-sub').textContent=`${allData.length.toLocaleString()} accounts · ${filename} · ${dateStr}`;
+  document.getElementById('main-dashboard').style.display='block';
+  document.getElementById('trial-empty').style.display='none';
+  document.getElementById('trial-content').style.display='block';
+  const sb=document.getElementById('snap-badge');sb.textContent=snapshots.length;sb.style.display='';
+  activeFilter=null;sortKey='dev';sortDir=-1;page=0;
+  document.querySelectorAll('[data-filter]').forEach(c=>c.classList.remove('active'));
+  document.querySelectorAll('.insight-panel').forEach(p=>p.classList.remove('visible'));
+  populateTrendFilters();renderSnapsBar();applyFilters();renderTrialTable();
+  // Reset Insights dropdowns BEFORE buildTestTab so option-resets don't trigger extra rebuilds
+  const _tsel=document.getElementById('oem-filter');
+  const _tf=document.getElementById('date-from');
+  const _tt=document.getElementById('date-to');
+  // Temporarily remove onchange to prevent spurious buildTestTab calls during reset
+  const _tselOC=_tsel?.onchange;const _tfOC=_tf?.onchange;const _ttOC=_tt?.onchange;
+  if(_tsel)_tsel.onchange=null;if(_tf)_tf.onchange=null;if(_tt)_tt.onchange=null;
+  if(_tsel){_tsel.value='all';_tsel.options.length=1;_tsel.dataset.populated='';}
+  if(_tf){_tf.options.length=1;_tf.dataset.populated='';}
+  if(_tt){_tt.options.length=1;_tt.dataset.populated='';}
+  // Restore onchange handlers
+  if(_tsel)_tsel.onchange=_tselOC;if(_tf)_tf.onchange=_tfOC;if(_tt)_tt.onchange=_ttOC;
+  buildTestTab(allData,'all');
+  populateDashOemFilter();
+  const _dashSel=document.getElementById('dash-oem-filter');if(_dashSel)_dashSel.value='all';const _dashLb=document.getElementById('dash-lookback');if(_dashLb)_dashLb.value='180';
+  filterDashAlerts();
+  const _ss=document.getElementById('silence-strip');if(_ss)_ss.style.display='';
+  // Reset drilldowns on new upload
+  const _dd=document.getElementById('pie-drilldown');if(_dd){_dd.style.display='none';}_tActivePieKey='';
+  const _pd=document.getElementById('pie-drilldown');if(_pd){_pd.style.display='none';}
+  const _td=document.getElementById('ins-drilldown');if(_td)_td.style.display='none';
+}
+
+function buildBars(id,data,showPct=false,total=0){
+  const el=document.getElementById(id);if(!el)return;
+  const max=Math.max(...data.map(d=>d.n),1);
+  el.innerHTML=data.map(d=>{
+    const w=(d.n/max*100).toFixed(1);
+    const pct=showPct&&total>0?`<span style="font-size:10px;color:#bbb;width:36px;text-align:right;flex-shrink:0">${(d.n/total*100).toFixed(1)}%</span>`:'';
+    return`<div class="bar-row"><div class="bar-name">${d.l}</div><div class="bar-track"><div class="bar-fill ${d.c}" style="width:0%" data-w="${w}"></div></div><div class="bar-n">${d.n.toLocaleString()}</div>${pct}</div>`;
+  }).join('');
+}
+
+/* ═══ PANELS ═══ */
+function closePanel(id){document.getElementById(id).classList.remove('visible');}
+function openPanel(id){
+  document.querySelectorAll('.insight-panel').forEach(p=>p.classList.remove('visible'));
+  document.getElementById(id).classList.add('visible');
+  setTimeout(()=>document.querySelectorAll('#'+id+' [data-w]').forEach(el=>el.style.width=el.dataset.w+'%'),40);
+}
+document.querySelectorAll('[data-filter]').forEach(card=>{
+  card.addEventListener('click',()=>{
+    if(!allData.length)return;
+    const f=card.dataset.filter,pid=card.dataset.panel,wasActive=activeFilter===f;
+    document.querySelectorAll('[data-filter]').forEach(c=>c.classList.remove('active'));
+    document.querySelectorAll('.insight-panel').forEach(p=>p.classList.remove('visible'));
+    if(!wasActive){activeFilter=f;card.classList.add('active');if(pid)openPanel(pid);}
+    else activeFilter=null;
+    page=0;applyFilters();
+  });
+});
+
+/* ═══ MAIN TABLE ═══ */
+function applyFilters(){
+  const q=document.getElementById('search').value.toLowerCase();
+  const oemFilter=document.getElementById('dash-oem-filter')?.value||'all';
+  const lookback=parseInt(document.getElementById('dash-lookback')?.value||'99999');
+  const now=Date.now();
+  const FULL_DEAD=r=>{
+    if(r.la&&r.daysSince!==null)return r.daysSince<=lookback;
+    if(r.created){const ds=Math.floor((now-new Date(r.created))/86400000);return ds<=lookback;}
+    return lookback>=99999;
+  };
+  filtered=allData.filter(r=>{
+    if(oemFilter!=='all'&&r.oem!==oemFilter)return false;
+    if(lookback<99999&&!FULL_DEAD(r))return false;
+    if(activeFilter){if(TIER_FN[activeFilter]){if(!TIER_FN[activeFilter](r))return false;}else if(!r.f.includes(activeFilter))return false;}
+    if(q&&!(r.d+' '+r.co+' '+r.ct+' '+r.email).toLowerCase().includes(q))return false;
+    return true;
+  });
+  filtered.sort((a,b)=>{let av=a[sortKey],bv=b[sortKey];if(av==null)av=sortDir>0?Infinity:-Infinity;if(bv==null)bv=sortDir>0?Infinity:-Infinity;return typeof av==='string'?sortDir*av.localeCompare(bv):sortDir*(av-bv);});
+  updateChip();renderTable();
+}
+function updateChip(){
+  const el=document.getElementById('chips'),title=document.getElementById('tbl-title'),count=document.getElementById('tbl-count');
+  if(!el||!title||!count)return;
+  if(activeFilter){const meta=FLAG_META[activeFilter];const label=meta?meta.label:('Tier '+activeFilter.slice(-1));const dot=meta?meta.dot:'fd-g';el.innerHTML=`<div class="chip"><div class="fdot ${dot}"></div>${label}<span class="chip-x" onclick="clearAll()">✕</span></div>`;title.textContent=label;}
+  else{el.innerHTML='';title.textContent='All accounts';}
+  count.textContent=`${filtered.length.toLocaleString()} of ${allData.length.toLocaleString()} accounts`;
+}
+function clearAll(){activeFilter=null;document.getElementById('search').value='';document.querySelectorAll('[data-filter]').forEach(c=>c.classList.remove('active'));document.querySelectorAll('.insight-panel').forEach(p=>p.classList.remove('visible'));applyFilters();}
+function sortBy(k){if(sortKey===k)sortDir*=-1;else{sortKey=k;sortDir=-1;}document.querySelectorAll('.sarr').forEach(e=>{e.className='sarr';e.textContent='↕';});const el=document.getElementById('s-'+k);if(el){el.className='sarr on';el.textContent=sortDir>0?'↑':'↓';}page=0;applyFilters();}
+const TLC={green:'#1D9E75',amber:'#EF9F27',red:'#E24B4A'};
+function tlDot(tl){return TLC[tl]?`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${TLC[tl]};vertical-align:middle"></span>`:`<span class="muted">—</span>`;}
+function renderTable(){
+  const slice=filtered.slice(page*PAGE,page*PAGE+PAGE);
+  document.getElementById('tbl-body').innerHTML=slice.map(r=>{
+    const flags=r.f.map(f=>{const m=FLAG_META[f];return m?`<span class="rfdot ${m.dot}" title="${m.label}"></span>`:''}).join('');
+    const fw=flags?`<span class="flags">${flags}</span>`:'';
+    const lim=r.lim?`<span class="badge b-lim">limited</span>`:`<span class="muted">—</span>`;
+    const tr=r.tr?`<span class="badge b-trial">trial</span>`:`<span class="muted">—</span>`;
+    const cr=r.cr==null?`<span class="muted">—</span>`:(r.cr<0?`<span class="neg">${r.cr.toLocaleString()}</span>`:r.cr.toLocaleString());
+    const dl=r.daysLeft?Math.round(r.daysLeft).toLocaleString():`<span class="muted">—</span>`;
+    const trd=r.trDays!==null&&r.tr?Math.round(r.trDays):`<span class="muted">—</span>`;
+    return`<tr><td>${fw}${r.d}</td><td>${r.co||'<span class="muted">—</span>'}</td><td>${r.ct||'<span class="muted">—</span>'}</td><td>${r.created||'<span class="muted">—</span>'}</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis">${r.email||'<span class="muted">—</span>'}</td><td><span class="badge b-oem">${r.oem}</span></td><td>${r.dev.toLocaleString()}</td><td>${tr}</td><td>${trd}</td><td>${cr}</td><td>${dl}</td><td>${r.la||'<span class="muted">—</span>'}</td><td>${lim}</td><td>${r.cmd.toLocaleString()}</td><td>${r.dev>0?r.cpd.toFixed(1):'<span class="muted">—</span>'}</td><td>${tlDot(r.tl)}</td></tr>`;
+  }).join('');
+  const total=Math.ceil(filtered.length/PAGE)||1;
+  document.getElementById('page-info').textContent=`Page ${page+1} of ${total} (${filtered.length.toLocaleString()} rows)`;
+  document.getElementById('prev-btn').disabled=page===0;
+  document.getElementById('next-btn').disabled=page>=total-1;
+}
+function changePage(d){page+=d;renderTable();window.scrollTo(0,document.getElementById('tbl-title').offsetTop-20);}
+
+/* ═══ TRIAL MONITOR TABLE ═══ */
+function renderTrialTable(){
+  const tlFilter=document.getElementById('tm-tl-filter')?.value||'all';
+  const oemFilter=document.getElementById('tm-oem-filter')?.value||'all';
+  const q=(document.getElementById('tm-search')?.value||'').toLowerCase();
+  const noDevOnly=q==='__nodev__';
+  trialFiltered=trialData.filter(r=>{
+    if(tlFilter!=='all'&&r.tl!==tlFilter)return false;
+    if(oemFilter!=='all'&&r.oem!==oemFilter)return false;
+    if(noDevOnly)return r.dev===0;
+    if(q&&!(r.d+' '+r.co).toLowerCase().includes(q))return false;
+    return true;
+  });
+  trialFiltered.sort((a,b)=>{
+    let av=a[trialSortKey],bv=b[trialSortKey];
+    // secondary sort: tl_order asc, then trDays asc
+    if(trialSortKey==='tl_order'){const tlDiff=(a.tl_order??3)-(b.tl_order??3);if(tlDiff!==0)return tlDiff;return (a.trDays??999)-(b.trDays??999);}
+    if(av==null)av=trialSortDir>0?Infinity:-Infinity;
+    if(bv==null)bv=trialSortDir>0?Infinity:-Infinity;
+    return typeof av==='string'?trialSortDir*av.localeCompare(bv):trialSortDir*(av-bv);
+  });
+  const slice=trialFiltered.slice(trialPage*TRIAL_PAGE,trialPage*TRIAL_PAGE+TRIAL_PAGE);
+  document.getElementById('trial-body').innerHTML=slice.map(r=>{
+    const tld=tlDot(r.tl);
+    const di=r.daysIntoTrial!==null?r.daysIntoTrial+'d':`<span class="muted">—</span>`;
+    const trd=r.trDays!==null?Math.round(r.trDays)+'d':`<span class="muted">—</span>`;
+    const lp=r.lowP>0?`<span style="color:#854F0B;font-weight:500">${r.lowP}</span>`:r.lowP;
+    const trDStyle=r.trDays!==null&&r.trDays<=3?'color:#A32D2D;font-weight:500':r.trDays<=15?'color:#854F0B;font-weight:500':'';
+    return`<tr><td>${tld}</td><td>${r.d}</td><td>${r.co||'<span class="muted">—</span>'}</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis">${r.email||'<span class="muted">—</span>'}</td><td><span class="badge b-oem">${r.oem}</span></td><td>${di}</td><td style="${trDStyle}">${trd}</td><td>${r.dev.toLocaleString()}</td><td>${r.cmd.toLocaleString()}</td><td>${lp}</td><td>${r.la||'<span class="muted">—</span>'}</td><td>${r.ct||'<span class="muted">—</span>'}</td></tr>`;
+  }).join('');
+  const total=Math.ceil(trialFiltered.length/TRIAL_PAGE)||1;
+  document.getElementById('tm-page-info').textContent=`Page ${trialPage+1} of ${total} (${trialFiltered.length.toLocaleString()} trials)`;
+  document.getElementById('tm-prev').disabled=trialPage===0;
+  document.getElementById('tm-next').disabled=trialPage>=total-1;
+}
+function sortTrial(k){
+  if(trialSortKey===k)trialSortDir*=-1;else{trialSortKey=k;trialSortDir=k==='tl_order'?1:-1;}
+  document.querySelectorAll('[id^="ts-"]').forEach(e=>{e.className='sarr';e.textContent='↕';});
+  const map={tl_order:'ts-tl',d:'ts-d',co:'ts-co',email:'ts-email',oem:'ts-oem',daysIntoTrial:'ts-dit',trDays:'ts-trd',dev:'ts-dev',cmd:'ts-cmd',lowP:'ts-lp',la:'ts-la',ct:'ts-ct'};
+  const el=document.getElementById(map[k]);if(el){el.className='sarr on';el.textContent=trialSortDir>0?'↑':'↓';}
+  trialPage=0;renderTrialTable();
+}
+function resetTrialFilters(){document.getElementById('tm-tl-filter').value='all';document.getElementById('tm-oem-filter').value='all';document.getElementById('tm-search').value='';trialPage=0;renderTrialTable();}
+function setTrialTL(tl){const sel=document.getElementById('tm-tl-filter');if(sel.value===tl){sel.value='all';}else{sel.value=tl;}trialPage=0;renderTrialTable();}
+function setTrialNoDev(){const sel=document.getElementById('tm-tl-filter');const s=document.getElementById('tm-search');if(s.value==='__nodev__'){s.value='';}else{s.value='__nodev__';}trialPage=0;renderTrialTable();}
+function changeTrialPage(d){trialPage+=d;renderTrialTable();}
+
+/* ═══ SNAPSHOTS BAR ═══ */
+function renderSnapsBar(){
+  const bar=document.getElementById('snapshots-bar');
+  if(!snapshots.length){bar.innerHTML='';return;}
+  bar.innerHTML='<span class="snap-label">Snapshots:</span>'+snapshots.map((s,i)=>`<span class="snap-chip ${i===snapshots.length-1?'current':''}">📅 ${s.date}</span>`).join('');
+}
+function deleteSnap(i){} // viewer: read-only
+
+/* ═══ TRENDS ═══ */
+function populateTrendFilters(){
+  const oemSet=new Set();snapshots.forEach(s=>Object.entries(s.oemCounts||{}).filter(([,n])=>n>=50).forEach(([o])=>oemSet.add(o)));
+  const capF=o=>o?o[0].toUpperCase()+o.slice(1):o;
+  const oemSorted=[...oemSet].sort((a,b)=>capF(a).localeCompare(capF(b)));
+  const oemSel=document.getElementById('oem-filter');if(!oemSel)return;const cur=oemSel.value;
+  oemSel.innerHTML='<option value="all">All OEMs</option>'+oemSorted.map(o=>`<option value="${o}"${o===cur?' selected':''}>${capF(o)}</option>`).join('');
+  const dates=snapshots.map(s=>s.date);
+  const fromSel=document.getElementById('date-from');const toSel=document.getElementById('date-to');
+  if(!fromSel||!toSel)return;
+  const cf=fromSel.value,ct=toSel.value;
+  fromSel.innerHTML='<option value="">From — all</option>'+dates.map(d=>`<option value="${d}"${d===cf?' selected':''}>${d}</option>`).join('');
+  toSel.innerHTML='<option value="">To — all</option>'+dates.map(d=>`<option value="${d}"${d===ct?' selected':''}>${d}</option>`).join('');
+}
+function clearTrendFilters(){document.getElementById('oem-filter').value='all';document.getElementById('date-from').value='';document.getElementById('date-to').value='';renderTrends();}
+function renderTrends(){
+  const _pg=document.getElementById('pie-grid'),_tb=document.getElementById('trend-charts-block'),_sb=document.getElementById('snap-tbl-body');
+  if(!_pg||!_tb||!_sb)return;
+  if(!snapshots.length){
+    populateTrendFilters();
+    const oemFilter=document.getElementById('oem-filter')?.value||'all';
+    renderPies(null,oemFilter);
+    _tb.innerHTML='<div class="info-note">Load 2 or more weekly files to see trend lines</div>';
+    _sb.innerHTML='';return;
+  }
+  populateTrendFilters();
+  const oemFilter=document.getElementById('oem-filter').value;
+  const fromFilter=document.getElementById('date-from').value;
+  const toFilter=document.getElementById('date-to').value;
+  let snaps=[...snapshots];
+  if(fromFilter)snaps=snaps.filter(s=>s.date>=fromFilter);
+  if(toFilter)snaps=snaps.filter(s=>s.date<=toFilter);
+  renderPies(snaps[0]||snapshots[0],oemFilter);
+  renderTrendLines(snaps,oemFilter);
+  _sb.innerHTML=snapshots.map((s,i)=>`<tr><td>${s.date}</td><td>${s.filename}</td><td>${s.total.toLocaleString()}</td><td>${(s.counts.stale_large||0).toLocaleString()}</td><td>${(s.counts.declining||0).toLocaleString()}</td><td>${(s.counts.renewal_expired||0).toLocaleString()}</td><td>${(s.counts.expiry_30||0).toLocaleString()}</td><td><span class="snap-del" onclick="deleteSnap(${i})">×</span></td></tr>`).join('');
+}
+
+function renderPies(snap,oemFilter){
+  const grid=document.getElementById('pie-grid');
+  if(!grid)return;
+  if(!allData.length){grid.innerHTML='<div class="info-note">Load your first xlsx to see charts</div>';return;}
+
+  // Always compute from live allData — no snapshot needed
+  const pieDefs=[
+    {title:'Accounts by OEM',        fn:r=>true},
+    {title:'0-device accounts by OEM',fn:r=>r.dev===0},
+    {title:'1-device stalled by OEM', fn:r=>r.f.includes('single_dev')},
+    {title:'Negative credits by OEM', fn:r=>r.cr!==null&&r.cr<0},
+  ];
+  const pieDrillFns=[
+    oem=>r=>r.oem===oem,
+    oem=>r=>r.oem===oem&&r.dev===0,
+    oem=>r=>r.oem===oem&&r.f.includes('single_dev'),
+    oem=>r=>r.oem===oem&&r.cr!==null&&r.cr<0,
+  ];
+
+  destroyCharts('pie-');
+  grid.innerHTML=pieDefs.map((p,pi)=>`<div class="pie-card"><div class="pie-card-title">${p.title} <span style="font-size:9px;color:#bbb;font-weight:400">· click slice</span></div><div class="pie-wrap"><canvas id="pie-${pi}" style="cursor:pointer"></canvas></div><div class="pie-legend" id="pie-leg-${pi}"></div></div>`).join('');
+
+  pieDefs.forEach((p,pi)=>{
+    const base=allData.filter(p.fn);
+    const oemMap={};
+    base.forEach(r=>{oemMap[r.oem]=(oemMap[r.oem]||0)+1;});
+    let entries=Object.entries(oemMap).sort((a,b)=>b[1]-a[1]);
+    if(oemFilter!=='all')entries=entries.filter(([oem])=>oem===oemFilter);
+    else entries=entries.slice(0,10);
+    if(!entries.length){document.getElementById(`pie-leg-${pi}`).innerHTML='<div class="info-note">No data for selected OEM</div>';return;}
+    const labels=entries.map(([oem])=>oem);
+    const vals=entries.map(([,n])=>n);
+    const colors=PIE_COLORS.slice(0,labels.length);
+    const total=vals.reduce((s,v)=>s+v,0);
+    const cid=`pie-${pi}`;
+    chartInstances[cid]=safeChart(cid,{
+      type:'doughnut',
+      data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:2,borderColor:'#fff'}]},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        onClick(evt,elements){
+          if(!elements.length)return;
+          const oem=labels[elements[0].index];
+          showPieDrilldown(`${p.title} — ${oem}`,allData.filter(pieDrillFns[pi](oem)));
+        },
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{label:c=>`${c.label}: ${c.parsed.toLocaleString()} (${total>0?Math.round(c.parsed/total*100):0}%)`}},
+          datalabels:{display:false}
+        },
+        layout:{padding:10}
+      },
+      plugins:[{
+        id:'pieLabels',
+        afterDraw(chart){
+          const {ctx}=chart;
+          chart.data.datasets.forEach((dataset,di)=>{
+            chart.getDatasetMeta(di).data.forEach((arc,i)=>{
+              const val=dataset.data[i];
+              const pct=total>0?Math.round(val/total*100):0;
+              if(pct<5)return;
+              const label=labels.length===1?val.toLocaleString():pct+'%';
+              const mid=(arc.startAngle+arc.endAngle)/2;
+              const r=arc.outerRadius*0.65;
+              const x=arc.x+Math.cos(mid)*r;
+              const y=arc.y+Math.sin(mid)*r;
+              ctx.save();ctx.fillStyle='#fff';ctx.font='bold 11px -apple-system,sans-serif';
+              ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,x,y);ctx.restore();
+            });
+          });
+        }
+      }]
+    });
+    document.getElementById(`pie-leg-${pi}`).innerHTML=labels.slice(0,6).map((l,i)=>`<div class="pie-leg-row"><div class="pie-leg-dot" style="background:${colors[i]}"></div>${l}<span style="margin-left:auto;color:#aaa;font-size:10px">${vals[i].toLocaleString()} (${total>0?Math.round(vals[i]/total*100):0}%)</span></div>`).join('');
+  });
+}
+
+function renderTrendLines(snaps,oemFilter){
+  destroyCharts('tc-');
+  const block=document.getElementById('trend-charts-block');
+  if(!block)return;
+  if(snaps.length<1){block.innerHTML='<div class="info-note">Load a weekly file to see charts</div>';return;}
+  const singleSnap=snaps.length===1;
+  const dates=snaps.map(s=>s.date);
+  const cats=['churn','inactive','billing','ops'];
+  const catLabels={churn:'Churn risk',inactive:'Inactive',billing:'Billing / upsell',ops:'Ops / data'};
+  const catClass={churn:'cat-churn',inactive:'cat-inactive',billing:'cat-billing',ops:'cat-ops'};
+  block.innerHTML=cats.map(cat=>{
+    const alerts=ALERTS.filter(a=>a.cat===cat);
+    return`<div class="cat-section"><div class="cat-label ${catClass[cat]}">${catLabels[cat]}</div><div class="charts-grid">${alerts.map(a=>`<div class="chart-card"><div class="chart-title">${a.label}</div><div class="chart-num" id="tn-${a.key}">—</div><div class="chart-delta" id="td-${a.key}">${singleSnap?'<span style="font-size:9px;color:#bbb">load 2nd file for trend</span>':''}</div><div class="chart-wrap"><canvas id="tc-${a.key}"></canvas></div></div>`).join('')}</div></div>`;
+  }).join('');
+  cats.forEach(cat=>{
+    const alerts=ALERTS.filter(a=>a.cat===cat);
+    alerts.forEach((a,ai)=>{
+      const vals=snaps.map(s=>s.counts[a.key]||0);
+      const latest=vals[vals.length-1],prev=vals.length>1?vals[vals.length-2]:null;
+      setText(`tn-${a.key}`,latest.toLocaleString());
+      if(prev!==null){const diff=latest-prev,pct=prev>0?((diff/prev)*100).toFixed(1):'100';const el=document.getElementById(`td-${a.key}`);if(el){if(diff>0){el.className='chart-delta delta-up';el.textContent=`▲ ${Math.abs(diff).toLocaleString()} (+${pct}%)`;}else if(diff<0){el.className='chart-delta delta-down';el.textContent=`▼ ${Math.abs(diff).toLocaleString()} (${pct}%)`;}else{el.className='chart-delta delta-flat';el.textContent='No change';}}}
+      const cid='tc-'+a.key;
+      const color=(CAT_COLORS[cat]||['#aaa'])[ai%(CAT_COLORS[cat]||['#aaa']).length];
+      if(singleSnap){
+        chartInstances[cid]=safeChart(cid,{type:'bar',data:{labels:[dates[0]],datasets:[{data:vals,backgroundColor:color+'99',borderColor:color,borderWidth:1.5,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y.toLocaleString()} accounts`}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#aaa'}},y:{grid:{color:'#f2f1ed'},ticks:{font:{size:9},color:'#aaa'},beginAtZero:true}}}});
+      } else {
+        chartInstances[cid]=safeChart(cid,{type:'line',data:{labels:dates,datasets:[{data:vals,borderColor:color,backgroundColor:color+'22',borderWidth:2,pointBackgroundColor:color,pointRadius:3,fill:true,tension:.3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y.toLocaleString()} accounts`}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#aaa',maxRotation:45}},y:{grid:{color:'#f2f1ed'},ticks:{font:{size:9},color:'#aaa'},beginAtZero:false}}}});
+      }
+    });
+  });
+}
+
+/* ═══ INSIGHTS SECTIONS ═══ */
+function buildInsights(data, oemFilter){
+  if(!data.length) return;
+  renderTrends();
+  const fData = oemFilter==='all' ? data : data.filter(r=>r.oem===oemFilter);
+  const total = fData.length;
+  if(!total) return;
+
+  // Populate OEM filter
+  const oemSel = document.getElementById('oem-filter');
+  if(oemSel && oemSel.options.length <= 1){
+    const oemCount={};data.forEach(r=>{oemCount[r.oem]=(oemCount[r.oem]||0)+1;});
+    const capOem=o=>o?o[0].toUpperCase()+o.slice(1):o;
+    Object.entries(oemCount).filter(([,n])=>n>=50).sort((a,b)=>capOem(a[0]).localeCompare(capOem(b[0])))
+      .forEach(([o])=>{const opt=document.createElement('option');opt.value=o;opt.textContent=`${capOem(o)} (${oemCount[o].toLocaleString()})`;oemSel.appendChild(opt);});
+  }
+
+  // Activation funnel
+  const enrolled = fData.filter(r=>r.dev>0).length;
+  const used = fData.filter(r=>r.cmd>0).length;
+  const active36 = fData.filter(r=>r.daysSince!==null&&r.daysSince<=36).length;
+  const funnelEl = document.getElementById('ins-funnel');
+  if(funnelEl){
+    const steps=[
+      {l:'Total accounts',n:total,pct:100,c:'#888'},
+      {l:'Devices enrolled',n:enrolled,pct:Math.round(enrolled/total*100),c:'#378ADD'},
+      {l:'Used product',n:used,pct:Math.round(used/total*100),c:'#185FA5'},
+      {l:'Active last 36d',n:active36,pct:Math.round(active36/total*100),c:'#1D9E75',note:'Will improve once full last activity data is available'},
+    ];
+    funnelEl.innerHTML = steps.map(s=>`<div class="ins-bar-row"><div class="ins-bar-label">${s.l}${s.note?`<br><span style="font-size:9px;color:#aaa;font-style:italic">${s.note}</span>`:''}</div><div class="ins-bar-track"><div class="ins-bar-fill" style="width:${s.pct}%;background:${s.c}">${s.pct}%</div></div><div class="ins-bar-meta">${s.pct}% &nbsp;${s.n.toLocaleString()}</div></div>`).join('');
+  }
+
+  // Plan type split
+  const activeBase = fData.filter(r=>r.dev>0&&r.cmd>0);
+  const abTotal = activeBase.length;
+  const planSub = document.getElementById('ins-plan-sub');
+  if(planSub) planSub.textContent = `Based on ${abTotal.toLocaleString()} active accounts (devices > 0 and commands > 0)  ·  filter will update when full last activity data is available`;
+  const planEl = document.getElementById('ins-plan');
+  if(planEl && abTotal){
+    const limited = activeBase.filter(r=>r.lim).length;
+    const full = activeBase.filter(r=>!r.lim&&!r.tr).length;
+    const trial = activeBase.filter(r=>r.tr).length;
+    const plans=[
+      {l:'Limited plan',n:limited,c:'#EF9F27'},
+      {l:'Full plan',n:full,c:'#1D9E75'},
+      {l:'Active trials',n:trial,c:'#378ADD'},
+    ];
+    planEl.innerHTML = plans.map(p=>{
+      const pct=Math.round(p.n/abTotal*100);
+      return `<div class="ins-bar-row"><div class="ins-bar-label">${p.l}</div><div class="ins-bar-track"><div class="ins-bar-fill" style="width:${pct}%;background:${p.c}">${pct}%</div></div><div class="ins-bar-meta">${p.n.toLocaleString()} (${pct}%)</div></div>`;
+    }).join('');
+  }
+
+  // Usage by account size
+  const sizeEl = document.getElementById('ins-size');
+  if(sizeEl){
+    const tiers=[
+      {l:'1–10 dev',fn:r=>r.dev>=1&&r.dev<=10},
+      {l:'11–50',fn:r=>r.dev>=11&&r.dev<=50},
+      {l:'51–200',fn:r=>r.dev>=51&&r.dev<=200},
+      {l:'201–500',fn:r=>r.dev>=201&&r.dev<=500},
+      {l:'500+ dev',fn:r=>r.dev>500},
+    ];
+    sizeEl.innerHTML = tiers.map(t=>{
+      const group = fData.filter(t.fn);
+      const total_g = group.length;
+      if(!total_g) return '';
+      const active_g = group.filter(r=>r.cmd>0).length;
+      const pct = Math.round(active_g/total_g*100);
+      const avgCmd = total_g ? Math.round(group.reduce((s,r)=>s+r.cmd,0)/total_g) : 0;
+      return `<div class="ins-bar-row"><div class="ins-bar-label">${t.l}</div><div class="ins-bar-track"><div class="ins-bar-fill" style="width:${pct}%;background:#378ADD">${pct}%</div></div><div class="ins-bar-meta">${pct}% &nbsp;<span style="color:#bbb">${avgCmd} avg cmds &nbsp;${total_g.toLocaleString()} accts</span></div></div>`;
+    }).join('');
+  }
+
+  // Upsell targets: limited + active, by size
+  const upsellEl = document.getElementById('ins-upsell');
+  if(upsellEl){
+    const upsellTiers=[
+      {l:'1–10 dev',fn:r=>r.dev>=1&&r.dev<=10},
+      {l:'11–50',fn:r=>r.dev>=11&&r.dev<=50},
+      {l:'51–200',fn:r=>r.dev>=51&&r.dev<=200},
+      {l:'201–500',fn:r=>r.dev>=201&&r.dev<=500},
+      {l:'500+ dev',fn:r=>r.dev>500},
+    ];
+    upsellEl.innerHTML = upsellTiers.map(t=>{
+      const n = fData.filter(r=>r.lim&&r.cmd>0&&t.fn(r)).length;
+      return `<div class="upsell-card"><div class="upsell-tier">${t.l}</div><div class="upsell-num">${n.toLocaleString()}</div><div class="upsell-sub">limited + active</div></div>`;
+    }).join('');
+  }
+
+  // ── Insight panels (re-run on every OEM filter change) ──
+  const fCounts={};ALERTS.forEach(a=>fCounts[a.key]=0);
+  let fCpdVals=[],fSomeLPCount=0,fAllLPTrialCount=0;
+  for(const r of fData){
+    r.f.forEach(f=>{if(fCounts[f]!==undefined)fCounts[f]++;});
+    if(r.dev>0&&r.cmd>0&&r.la)fCpdVals.push(r.cpd);
+    if(r.someLP)fSomeLPCount++;
+    if(r.allLP&&r.tr)fAllLPTrialCount++;
+  }
+  const fSortedCpd=[...fCpdVals].sort((a,b)=>a-b);
+  const fMedian=fSortedCpd.length?fSortedCpd[Math.floor(fSortedCpd.length/2)]:0;
+
+  const wasActive=fData.filter(r=>r.dev>0&&r.cmd>0&&r.daysSince!==null);
+  const fresh=wasActive.filter(r=>r.daysSince<14).length;
+  const mid2=wasActive.filter(r=>r.daysSince>=14&&r.daysSince<30).length;
+  const old=wasActive.filter(r=>r.daysSince>=30).length;
+  setText('dec-sub',`— ${wasActive.length.toLocaleString()} previously active accounts`);
+  setText('dec-count',old.toLocaleString()+' flagged');
+  setText('dec-fresh',fresh.toLocaleString());setText('dec-mid',mid2.toLocaleString());setText('dec-old',old.toLocaleString());
+  buildBars('dec-bars',[{l:'<1 week',n:wasActive.filter(r=>r.daysSince<7).length,c:'fill-green'},{l:'1–2 weeks',n:wasActive.filter(r=>r.daysSince>=7&&r.daysSince<14).length,c:'fill-green'},{l:'2–4 weeks',n:wasActive.filter(r=>r.daysSince>=14&&r.daysSince<30).length,c:'fill-amber'},{l:'1–2 months',n:wasActive.filter(r=>r.daysSince>=30&&r.daysSince<60).length,c:'fill-red'},{l:'> 2 months',n:wasActive.filter(r=>r.daysSince>=60).length,c:'fill-red'}]);
+
+  const neActs=fData.filter(r=>r.f.includes('never_enrolled'));
+  setText('ne-sub',`— ${fCounts.never_enrolled.toLocaleString()} reachable accounts`);
+  setText('ne-reach',fCounts.never_enrolled.toLocaleString());setText('ne-ghost',fCounts.ghost.toLocaleString());
+  buildBars('ne-bars',[{l:'Email+company',n:neActs.filter(r=>r.co&&r.la).length,c:'fill-amber'},{l:'Email only',n:neActs.filter(r=>!r.co&&!r.la).length,c:'fill-amber'},{l:'Has activity',n:neActs.filter(r=>r.la).length,c:'fill-blue'}]);
+
+  const trActs=fData.filter(r=>r.tr&&r.trDays!==null&&r.trDays>0);
+  const t3=trActs.filter(r=>r.trDays<=3).length,t15=trActs.filter(r=>r.trDays>3&&r.trDays<=15).length,t30=trActs.filter(r=>r.trDays>15&&r.trDays<=30).length;
+  setText('te-sub',`— ${trActs.length.toLocaleString()} active trials`);
+  setText('te-3',t3.toLocaleString());setText('te-15',t15.toLocaleString());setText('te-30',t30.toLocaleString());setText('te-total',trActs.length.toLocaleString());
+  buildBars('te-bars',[{l:'Critical <3d',n:t3,c:'fill-red'},{l:'High 3–15d',n:t15,c:'fill-red'},{l:'Mid 15–30d',n:t30,c:'fill-amber'},{l:'OK 30+d',n:trActs.filter(r=>r.trDays>30).length,c:'fill-green'}]);
+
+  setText('lc-sub',`— ${fCpdVals.length.toLocaleString()} active accounts`);
+  setText('lc-count',fCounts.low_cmd.toLocaleString()+' flagged');
+  setText('lc-act',fCpdVals.length.toLocaleString());setText('lc-med',fMedian.toFixed(1));setText('lc-below',fCounts.low_cmd.toLocaleString());
+  buildBars('lc-bars',[{l:'< 1',n:fCpdVals.filter(v=>v<1).length,c:'fill-red'},{l:'1–2',n:fCpdVals.filter(v=>v>=1&&v<2).length,c:'fill-amber'},{l:'2–5',n:fCpdVals.filter(v=>v>=2&&v<5).length,c:'fill-amber'},{l:'5–10',n:fCpdVals.filter(v=>v>=5&&v<10).length,c:'fill-grey'},{l:'> 10',n:fCpdVals.filter(v=>v>=10).length,c:'fill-green'}]);
+
+  setText('lp-sub',`— ${(fCounts.all_lowpriv+fSomeLPCount).toLocaleString()} accounts with any low-priv devices`);
+  setText('lp-count',fCounts.all_lowpriv.toLocaleString()+' accounts');
+  setText('lp-all',fCounts.all_lowpriv.toLocaleString());setText('lp-some',fSomeLPCount.toLocaleString());setText('lp-trial',fAllLPTrialCount.toLocaleString());
+  buildBars('lp-bars',[{l:'All LP',n:fCounts.all_lowpriv,c:'fill-red'},{l:'Some LP',n:fSomeLPCount,c:'fill-amber'},{l:'None LP',n:fData.filter(r=>r.dev>0&&r.lowP===0).length,c:'fill-green'}]);
+
+  const sdActs=fData.filter(r=>r.f.includes('single_dev'));
+  setText('sd-sub',`— ${sdActs.length.toLocaleString()} accounts`);
+  buildBars('sd-bars',[{l:'0–30d since end',n:sdActs.filter(r=>r.daysSince>=0&&r.daysSince<=30).length,c:'fill-red'},{l:'30–60d since end',n:sdActs.filter(r=>r.daysSince>30&&r.daysSince<=60).length,c:'fill-amber'},{l:'60–90d since end',n:sdActs.filter(r=>r.daysSince>60&&r.daysSince<=90).length,c:'fill-amber'}]);
+
+  const exp30=fData.filter(r=>r.daysLeft&&r.daysLeft>0&&r.daysLeft<=30).length;
+  const exp60=fData.filter(r=>r.daysLeft&&r.daysLeft>30&&r.daysLeft<=60).length;
+  const exp90b=fData.filter(r=>r.daysLeft&&r.daysLeft>60&&r.daysLeft<=90).length;
+  setText('exp-sub',`— ${fData.filter(r=>r.daysLeft!==null).length.toLocaleString()} accounts with calculable expiry`);
+  setText('exp-30',exp30.toLocaleString());setText('exp-60',exp60.toLocaleString());setText('exp-90',exp90b.toLocaleString());
+  buildBars('exp-bars',[{l:'<30 days',n:exp30,c:'fill-red'},{l:'30–60d',n:exp60,c:'fill-amber'},{l:'60–90d',n:exp90b,c:'fill-amber'},{l:'No risk',n:fData.filter(r=>!r.daysLeft).length,c:'fill-green'}]);
+
+  const fGhostByOEM={};fData.filter(r=>r.f.includes('ghost')).forEach(r=>{fGhostByOEM[r.oem]=(fGhostByOEM[r.oem]||0)+1;});
+  const oemList=Object.entries(fGhostByOEM).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  setText('gh-sub',`— ${fCounts.ghost.toLocaleString()} uncontactable accounts`);
+  setText('gh-total',fData.length.toLocaleString());
+  setText('gh-pct',(fData.length>0?(fCounts.ghost/fData.length*100).toFixed(1):'0')+'%');
+  buildBars('gh-bars',oemList.map(([o,n],i)=>({l:o,n,c:i<2?'fill-red':i<5?'fill-amber':'fill-grey'})),true,fCounts.ghost);
+
+  // re-animate any open panel bars
+  document.querySelectorAll('.insight-panel.visible [data-w]').forEach(el=>el.style.width=el.dataset.w+'%');
+}
+
+/* ═══ DATA CLEANSING TAB ═══ */
+function renderCleansing(){
+  const el = document.getElementById('dc-content');
+  if(!el || !allData.length) return;
+
+  // Ghost: 0 devices + no contact
+  const ghost = allData.filter(r=>r.dev===0&&!r.email&&!r.co&&!r.la);
+  // Orphaned: no email, no company, no activity
+  const orphaned = allData.filter(r=>!r.email&&!r.co&&!r.la);
+  // 51+ no channel partner
+  const noCP = allData.filter(r=>r.f.includes('large_no_cp'));
+  // Malformed email (very basic check: no @ or no dot)
+  const badEmail = allData.filter(r=>r.email&&(!r.email.includes('@')||!r.email.includes('.')));
+  // Company is a number
+  const coIsNum = allData.filter(r=>r.co&&/^\d+$/.test(r.co.trim()));
+  // Country missing
+  const noCt = allData.filter(r=>!r.ct);
+  // Devices > 100k (likely data error)
+  const hugeDev = allData.filter(r=>r.dev>100000);
+  // Account > 10 years old
+  const oldAcc = allData.filter(r=>{
+    if(!r.created) return false;
+    const d = new Date(r.created);
+    return (new Date('2026-05-10') - d) > 10*365*24*3600*1000;
+  });
+
+  el.innerHTML = `
+    <div class="dc-section">
+      <div class="dc-section-title">Unreachable accounts</div>
+      <div class="dc-grid">
+        <div class="dc-card"><div class="dc-count">${ghost.length.toLocaleString()}</div><div class="dc-name">Ghost accounts</div><div class="dc-why">0 devices · no email · no company · no activity. Likely OEM shells or system-generated.</div></div>
+        <div class="dc-card"><div class="dc-count">${orphaned.length.toLocaleString()}</div><div class="dc-name">Orphaned accounts</div><div class="dc-why">No email, no company name, no activity date. Cannot be contacted by CS.</div></div>
+        <div class="dc-card"><div class="dc-count">${noCP.length.toLocaleString()}</div><div class="dc-name">51+ devices · no channel partner</div><div class="dc-why">Large accounts with no revenue attribution. Revenue unattributed.</div></div>
+      </div>
+    </div>
+    <div class="dc-section">
+      <div class="dc-section-title">Data quality issues</div>
+      <div class="dc-grid">
+        <div class="dc-card"><div class="dc-count">${badEmail.length.toLocaleString()}</div><div class="dc-name">Malformed email address</div><div class="dc-why">Email field present but missing @ or dot. Cannot send email reliably.</div></div>
+        <div class="dc-card"><div class="dc-count">${coIsNum.length.toLocaleString()}</div><div class="dc-name">Company name is a number</div><div class="dc-why">Company field contains only digits — likely a placeholder or data entry error.</div></div>
+        <div class="dc-card"><div class="dc-count">${noCt.length.toLocaleString()}</div><div class="dc-name">Country missing</div><div class="dc-why">No country recorded — affects regional filtering and reporting.</div></div>
+        <div class="dc-card"><div class="dc-count">${hugeDev.length.toLocaleString()}</div><div class="dc-name">Device count &gt; 100,000</div><div class="dc-why">Likely a data error. Inflates device tier counts and cmd/device ratios.</div></div>
+        <div class="dc-card"><div class="dc-count">${oldAcc.length.toLocaleString()}</div><div class="dc-name">Account created &gt; 10 years ago</div><div class="dc-why">Very old accounts — likely legacy data. Worth verifying if still active.</div></div>
+      </div>
+    </div>`;
+}
+
+/* ═══ ALERT GUIDE TAB ═══ */
+const GUIDE_ALERTS = [
+  {cat:'churn', name:'Silent large accounts',   condition:'devices >= 51  AND  last activity date is populated  AND  last activity is within the selected window  AND  last activity > 30 days ago', threshold:'51+ devices · silent 30+ days · active within window', why:'Large accounts (51+ devices) that have a last activity date, were active within your selected time window, but have gone quiet in the last 30+ days. Example at 6 months: accounts last active between 30 days and 6 months ago. The count grows as you extend the window because more accounts fall into the "was active but went quiet" range. These are your highest-value churn conversations — large deployments that were genuinely using the product and then stopped.'},
+  {cat:'churn', name:'Declining activity',        condition:'devices > 0 AND commands > 0 AND last activity > 30 days ago',         threshold:'30 days silent',           why:'Was active, now gone dark. Still recoverable.'},
+  {cat:'churn', name:'Never enrolled',            condition:'devices = 0 AND has email OR company OR activity date',                threshold:'0 devices, reachable',     why:'Signed up but never set up the product. CS has a contact.'},
+  {cat:'churn', name:'Trial expiring <30 days',   condition:'trial = TRUE AND 0 < trial days left <= 30',                          threshold:'30 days remaining',        why:'<3d = critical, <15d = high, <30d = mid churn risk.'},
+  {cat:'inactive', name:'Enrolled, never used',   condition:'devices > 0 AND commands = 0',                                        threshold:'0 commands ever',          why:'Product deployed, never touched. Purest inactivity signal.'},
+  {cat:'inactive', name:'Active but low commands',condition:'devices > 0 AND commands > 0 AND has activity AND cmd/device < 2',    threshold:'< 2 cmd/device (your median)', why:'Below this = bottom 50% of your active base.'},
+  {cat:'inactive', name:'All devices have limited permissions',   condition:'is device low priv = num devices (every device lacks system permissions)', threshold:'100% of devices low-priv', why:'Product installed but core features blocked. One CS call fixes this.'},
+  {cat:'inactive', name:'Single-device accounts', condition:'devices = 1 AND trial ended 0-90d ago AND inactive 90+ days',         threshold:'1 device · trial ended ≤90d · inactive ≥90d', why:'Stalled pilot after trial. Beyond 90 days excluded as unrecoverable.'},
+  {cat:'billing',  name:'Large account on limited plan', condition:'devices >= 51 AND limited = TRUE',                             threshold:'51+ devices, limited plan', why:'Large account on a capped plan. Clear upsell conversation.'},
+  {cat:'billing',  name:'Negative credits',        condition:'credits < 0',                                                         threshold:'Any negative value',       why:'Billing anomaly — should not happen. Investigate immediately.'},
+  {cat:'billing',  name:'Credits expiring · 90 days', condition:'credits ÷ devices <= 90 days  (or days_left <= 90)',              threshold:'< 90 days of credits left', why:'Credits budget ending within 90 days. Formula: credits ÷ devices where days_left is empty.'},
+  {cat:'billing',  name:'Renewal — expire <90 days', condition:'smart_expire_date between today and +90 days',                     threshold:'Smart expire date <90 days', why:'Smart licence expiring soon — account needs renewal outreach.'},
+  {cat:'billing',  name:'Credits expiring · 30 days', condition:'credits ÷ devices <= 30 days  (or days_left <= 30)',              threshold:'< 30 days of credits left', why:'Urgent — act now. Very little runway left.'},
+  {cat:'billing',  name:'Renewal — already expired', condition:'smart_expire_date < today AND within last 90 days',                threshold:'Lapsed within 90 days',    why:'Smart licence lapsed. Contact immediately to recover.'},
+];
+
+const GUIDE_CAT = {
+  churn:   {label:'Churn risk',    bg:'#A32D2D'},
+  inactive:{label:'Inactive',      bg:'#854F0B'},
+  billing: {label:'Billing / upsell', bg:'#185FA5'},
+};
+
+function renderGuide(){
+  ['churn','inactive','billing'].forEach(cat=>{
+    const el = document.getElementById('guide-'+cat);
+    if(!el) return;
+    const alerts = GUIDE_ALERTS.filter(a=>a.cat===cat);
+    const {label, bg} = GUIDE_CAT[cat];
+    el.innerHTML = `<div class="guide-cat-header" style="background:${bg}">${label.toUpperCase()}</div>` +
+      alerts.map(a=>`<div class="guide-row">
+        <div class="guide-name">${a.name}</div>
+        <div><div class="guide-condition" title="${a.condition}">${a.condition}</div><div class="guide-why">${a.why}</div></div>
+        <div style="text-align:right"><span class="guide-threshold">Threshold: ${a.threshold}</span></div>
+      </div>`).join('');
+  });
+
+  const tlEl = document.getElementById('guide-tl');
+  if(tlEl){
+    tlEl.innerHTML=`
+      <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;overflow:hidden;font-size:11px;margin-bottom:6px">
+        <div style="padding:.55rem 1rem;background:#f8f7f3;border-bottom:1px solid #e5e2db;color:#555;line-height:1.6">
+          The TL score appears as a coloured dot on every account row and in the Trial Monitor.
+          Scoring logic differs between <strong>trial accounts</strong> and <strong>existing customers</strong>.
+          <strong style="color:#c0392b">Note:</strong> 66% of active accounts typically score Red — prioritise by device count.
+        </div>
+
+        <!-- Trial customers -->
+        <div style="padding:.55rem 1rem;font-weight:600;color:#111;font-size:11px;background:#f8f7f3;border-bottom:1px solid #e5e2db">
+          Trial accounts (active trial)
+        </div>
+        <div style="display:grid;grid-template-columns:180px 1fr;border-bottom:0.5px solid #f2f1ed">
+          <div style="padding:.6rem 1rem;background:#E24B4A18;border-right:0.5px solid #e5e2db;display:flex;align-items:flex-start;gap:7px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#E24B4A;flex-shrink:0;margin-top:2px"></div>
+            <span style="font-weight:600;color:#E24B4A">High churn risk</span>
+          </div>
+          <div style="padding:.6rem 1rem;color:#555">
+            <div style="margin-bottom:3px">· 0 devices enrolled AND trial ends ≤ 15 days</div>
+            <div style="margin-bottom:3px">· Has devices BUT zero commands ever run</div>
+            <div style="margin-bottom:3px">· All devices have limited permissions (low-priv)</div>
+            <div>· Trial ending soon (≤ 15 days) with no recent activity (nothing in last 5 days)</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:180px 1fr;border-bottom:0.5px solid #f2f1ed">
+          <div style="padding:.6rem 1rem;background:#EF9F2718;border-right:0.5px solid #e5e2db;display:flex;align-items:flex-start;gap:7px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#EF9F27;flex-shrink:0;margin-top:2px"></div>
+            <span style="font-weight:600;color:#EF9F27">Mid churn risk</span>
+          </div>
+          <div style="padding:.6rem 1rem;color:#555">
+            <div style="margin-bottom:3px">· Trial ends ≤ 27 days AND not recently active (nothing in last 5 days)</div>
+            <div>· Any trial not meeting Red or Green criteria</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:180px 1fr;border-bottom:1px solid #e5e2db">
+          <div style="padding:.6rem 1rem;background:#1D9E7518;border-right:0.5px solid #e5e2db;display:flex;align-items:flex-start;gap:7px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#1D9E75;flex-shrink:0;margin-top:2px"></div>
+            <span style="font-weight:600;color:#1D9E75">Low churn risk</span>
+          </div>
+          <div style="padding:.6rem 1rem;color:#555">
+            <div style="margin-bottom:3px">· Active in the last 5 days (regardless of days remaining)</div>
+            <div>· Trial has 27+ days remaining</div>
+          </div>
+        </div>
+
+        <!-- Existing customers -->
+        <div style="padding:.55rem 1rem;font-weight:600;color:#111;font-size:11px;background:#f8f7f3;border-bottom:1px solid #e5e2db;border-top:1px solid #e5e2db">
+          Existing customers (post-trial)
+        </div>
+        <div style="display:grid;grid-template-columns:180px 1fr 1fr 1fr;border-bottom:0.5px solid #f2f1ed">
+          <div style="padding:.5rem 1rem;background:#f8f7f3;border-right:0.5px solid #e5e2db"></div>
+          <div style="padding:.5rem 1rem;font-weight:500;color:#888;font-size:10px;border-right:0.5px solid #e5e2db;text-align:center">Small (1–100 dev)</div>
+          <div style="padding:.5rem 1rem;font-weight:500;color:#888;font-size:10px;border-right:0.5px solid #e5e2db;text-align:center">Medium (101–500 dev)</div>
+          <div style="padding:.5rem 1rem;font-weight:500;color:#888;font-size:10px;text-align:center">Large (500+ dev)</div>
+        </div>
+        <div style="display:grid;grid-template-columns:180px 1fr 1fr 1fr;border-bottom:0.5px solid #f2f1ed">
+          <div style="padding:.6rem 1rem;background:#E24B4A18;border-right:0.5px solid #e5e2db;display:flex;align-items:center;gap:7px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#E24B4A;flex-shrink:0"></div>
+            <span style="font-weight:600;color:#E24B4A">High</span>
+          </div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Silent ≥ 90 days · or 0 commands · or all low-priv</div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Silent ≥ 30 days · or 0 commands · or all low-priv</div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px">Silent ≥ 14 days · or 0 commands · or all low-priv</div>
+        </div>
+        <div style="display:grid;grid-template-columns:180px 1fr 1fr 1fr;border-bottom:0.5px solid #f2f1ed">
+          <div style="padding:.6rem 1rem;background:#EF9F2718;border-right:0.5px solid #e5e2db;display:flex;align-items:center;gap:7px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#EF9F27;flex-shrink:0"></div>
+            <span style="font-weight:600;color:#EF9F27">Mid</span>
+          </div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Active but cmd/dev &lt; 2</div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Active but cmd/dev &lt; 3</div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px">Active but cmd/dev &lt; 5</div>
+        </div>
+        <div style="display:grid;grid-template-columns:180px 1fr 1fr 1fr">
+          <div style="padding:.6rem 1rem;background:#1D9E7518;border-right:0.5px solid #e5e2db;display:flex;align-items:center;gap:7px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#1D9E75;flex-shrink:0"></div>
+            <span style="font-weight:600;color:#1D9E75">Low</span>
+          </div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Active ≤ 14 days ago AND cmd/dev ≥ 2</div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Active ≤ 7 days ago AND cmd/dev ≥ 3</div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px">Active ≤ 3 days ago AND cmd/dev ≥ 5</div>
+        </div>
+      </div>`;
+  }
+
+  const excEl = document.getElementById('guide-exclusions');
+  if(excEl){
+    const excls = [
+      {name:'Last activity filter (dashboard control)', condition:'Accounts with last activity older than the selected window are excluded. Accounts with no last activity use creation date as fallback.', why:'<strong>Controls all 11 alert counts.</strong> Set via the "Last activity" dropdown (default 6 months). Accounts active within the window are counted. <strong>Silent large accounts</strong> specifically counts 51+ device accounts that are within the window but have gone quiet for 30+ days — last active between 30 days and your selected window. All other alerts count accounts active within the window that meet their own condition.'},
+      {name:'Ghana accounts', condition:'country = "Ghana"', why:'Excluded from all counts, alerts, and table rows.'},
+      {name:'OEM shell accounts (default domains)', condition:'domain contains "default"', why:'OEM placeholder accounts with no real end-user behind them.'},
+      {name:'Inactive OEM accounts', condition:'OEM = undefined AND (last activity null OR > 180 days)', why:'~10,152 accounts. No OEM attribution + completely inactive.'},
+    ];
+    excEl.innerHTML = excls.map(e=>`<div style="display:grid;grid-template-columns:140px 1fr;gap:10px;align-items:start;padding:.55rem .85rem;border-radius:8px;border:0.5px solid #e5e2db;background:#f8f7f3;font-size:11px;margin-bottom:4px">
+      <div style="font-weight:500;color:#111">${e.name}</div>
+      <div><div class="guide-condition">${e.condition}</div><div class="guide-why">${e.why}</div></div>
+    </div>`).join('');
+  }
+
+  const pendEl = document.getElementById('guide-pending');
+  if(pendEl){
+    pendEl.innerHTML = `<div style="display:grid;grid-template-columns:140px 1fr;gap:10px;align-items:start;padding:.55rem .85rem;border-radius:8px;border:1.5px solid #EEEDFE;background:#f9f9fe;font-size:11px;margin-bottom:4px">
+      <div style="font-weight:500;color:#534AB7">Dead account rule</div>
+      <div><div style="font-size:11px;background:#EEEDFE;padding:3px 8px;border-radius:3px;color:#534AB7;font-family:monospace">limited = TRUE AND last activity > 180 days ago</div><div class="guide-why" style="margin-top:3px">Blocked: current shob only populates last_activity for ~36 days. Will activate once full data is available.</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:140px 1fr;gap:10px;align-items:start;padding:.55rem .85rem;border-radius:8px;border:1.5px solid #EEEDFE;background:#f9f9fe;font-size:11px;margin-bottom:4px">
+      <div style="font-weight:500;color:#534AB7">Plan split upgrade</div>
+      <div><div style="font-size:11px;background:#EEEDFE;padding:3px 8px;border-radius:3px;color:#534AB7;font-family:monospace">last_activity within 180 days (replaces dev>0 AND cmd>0)</div><div class="guide-why" style="margin-top:3px">Plan type split in Insights tab will use this filter once full last_activity data is available.</div></div>
+    </div>`;
+  }
+}
+
+/* ═══ INSIGHT SECTIONS ═══ (old trends - keep for compatibility) */
+/* ═══ PIE DRILLDOWN ═══ */
+let _pieDrillRows=[],_pieDrillTitle='',_pieDrillPage=0;
+let _tActivePieKey='';
+const PIE_PAGE=20;
+
+function showPieDrilldown(title, rows){
+  _pieDrillRows=[...rows].sort((a,b)=>b.dev-a.dev);
+  _pieDrillTitle=title;
+  _pieDrillPage=0;
+  renderPieDrilldown();
+  document.getElementById('pie-drilldown').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function renderPieDrilldown(){
+  const dd=document.getElementById('pie-drilldown');
+  const rows=_pieDrillRows;
+  if(!rows.length){dd.style.display='none';return;}
+  dd.style.display='block';
+  const start=_pieDrillPage*PIE_PAGE, end=start+PIE_PAGE;
+  const page=rows.slice(start,end);
+  const totalPages=Math.ceil(rows.length/PIE_PAGE);
+
+  dd.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:.5rem 1rem;background:#f8f7f3;border-bottom:1px solid #e5e2db">
+      <span style="font-size:12px;font-weight:600;color:#111">${_pieDrillTitle}
+        <span style="color:#aaa;font-weight:400;font-size:11px">${rows.length.toLocaleString()} accounts · sorted by devices</span>
+      </span>
+      <span style="cursor:pointer;color:#bbb;font-size:18px;line-height:1" onclick="document.getElementById('pie-drilldown').style.display='none'">×</span>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead><tr style="background:#f8f7f3">
+          <th style="padding:.38rem .75rem;text-align:left;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">#</th>
+          <th style="padding:.38rem .75rem;text-align:left;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">Domain</th>
+          <th style="padding:.38rem .75rem;text-align:left;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">Company</th>
+          <th style="padding:.38rem .75rem;text-align:left;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">OEM</th>
+          <th style="padding:.38rem .75rem;text-align:right;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">Devices</th>
+          <th style="padding:.38rem .75rem;text-align:right;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">Cmd/dev</th>
+          <th style="padding:.38rem .75rem;text-align:right;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">Days left</th>
+          <th style="padding:.38rem .75rem;text-align:left;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">Last activity</th>
+          <th style="padding:.38rem .75rem;text-align:left;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">Trial ends</th>
+        </tr></thead>
+        <tbody>${page.map((r,i)=>`<tr style="background:${i%2?'#faf9f6':'#fff'}">
+          <td style="padding:.3rem .75rem;color:#ccc;font-size:10px">${start+i+1}</td>
+          <td style="padding:.3rem .75rem;color:#111;font-weight:500">${r.d}</td>
+          <td style="padding:.3rem .75rem;color:#555">${r.co||'—'}</td>
+          <td style="padding:.3rem .75rem;color:#888;font-size:10px">${r.oem}</td>
+          <td style="padding:.3rem .75rem;text-align:right;font-weight:700;color:#111">${r.dev.toLocaleString()}</td>
+          <td style="padding:.3rem .75rem;text-align:right;color:#555">${r.cpd??'—'}</td>
+          <td style="padding:.3rem .75rem;text-align:right;color:${r.daysLeft!=null&&r.daysLeft<30?'#c0392b':r.daysLeft!=null&&r.daysLeft<90?'#e67e22':'#555'}">${r.daysLeft!=null?r.daysLeft+'d':'—'}</td>
+          <td style="padding:.3rem .75rem;color:#888">${r.la||'—'}</td>
+          <td style="padding:.3rem .75rem;color:#888">${r.te||'—'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+    ${totalPages>1?`<div style="display:flex;align-items:center;justify-content:space-between;padding:.5rem 1rem;border-top:1px solid #f2f1ed;font-size:11px;color:#888">
+      <span>Page ${_pieDrillPage+1} of ${totalPages} · showing ${start+1}–${Math.min(end,rows.length)} of ${rows.length.toLocaleString()}</span>
+      <div style="display:flex;gap:6px">
+        ${_pieDrillPage>0?`<button onclick="_pieDrillPage--;renderPieDrilldown()" style="font-size:11px;padding:3px 10px;border:1px solid #ddd;border-radius:5px;background:#fff;cursor:pointer">← Prev</button>`:''}
+        ${end<rows.length?`<button onclick="_pieDrillPage++;renderPieDrilldown()" style="font-size:11px;padding:3px 10px;border:1px solid #ddd;border-radius:5px;background:#fff;cursor:pointer">Next →</button>`:''}
+      </div>
+    </div>`:''}`;
+}
+
+/* ═══ DASHBOARD OEM FILTER ═══ */
+const ALERT_NUM_IDS={
+  stale_large:'n-stale', declining:'n-declining', never_enrolled:'n-never-enrolled',
+  trial_expiring:'n-trial-expiring', enrolled_never:'n-never', low_cmd:'n-lowcmd',
+  all_lowpriv:'n-lowpriv', single_dev:'n-single', large_limited:'n-llim',
+  neg_cred:'n-negcred', expiry_90:'n-expiry90', expiry_30:'n-expiry30',
+  renewal_exp90:'n-renewal90', renewal_expired:'n-renewal-exp',
+  ghost:'n-ghost', orphaned:'n-orphaned', large_no_cp:'n-nocp'
+};
+
+function populateDashOemFilter(){
+  const sel=document.getElementById('dash-oem-filter');
+  if(!sel||sel.options.length>1)return;
+  const oemCount={};allData.forEach(r=>{oemCount[r.oem]=(oemCount[r.oem]||0)+1;});
+  const capO=o=>o?o[0].toUpperCase()+o.slice(1):o;
+  Object.entries(oemCount).filter(([,n])=>n>=50).sort((a,b)=>capO(a[0]).localeCompare(capO(b[0])))
+    .forEach(([o])=>{const opt=document.createElement('option');opt.value=o;opt.textContent=`${capO(o)} (${oemCount[o].toLocaleString()})`;sel.appendChild(opt);});
+}
+
+function filterDashAlerts(){
+  const oemFilter=document.getElementById('dash-oem-filter')?.value||'all';
+  const lookback=parseInt(document.getElementById('dash-lookback')?.value||'180');
+  const now=Date.now();
+  const baseData=oemFilter==='all'?allData:allData.filter(r=>r.oem===oemFilter);
+
+  // Dead filter: for accounts with la use daysSince, fallback to created date
+  const DEAD_FILTER=r=>{
+    if(r.la&&r.daysSince!==null) return r.daysSince<=lookback;
+    if(r.created){const ds=Math.floor((now-new Date(r.created))/86400000);return ds<=lookback;}
+    return lookback>=99999;
+  };
+  const fData=baseData.filter(DEAD_FILTER);
+
+  // Count all flags on alive accounts
+  const counts={};ALERTS.forEach(a=>counts[a.key]=0);
+  fData.forEach(r=>{if(r.f)r.f.forEach(f=>{if(counts[f]!==undefined)counts[f]++;});});
+
+  // stale_large: 51+ devices, within lookback window (alive), silent 30+ days
+  counts.stale_large=fData.filter(r=>r.dev>=51&&r.la&&r.daysSince!==null&&r.daysSince>30).length;
+  // Grey out stale_large card when window ≤ 30 days (mathematically impossible to have value)
+  const staleLargeCard=document.getElementById('card-stale-large');
+  if(staleLargeCard){staleLargeCard.style.opacity=lookback<=30?'0.35':'1';staleLargeCard.title=lookback<=30?'Cannot show: window too short (need >30 days to detect silence)':'';}
+
+
+  ALERTS.forEach(a=>{const el=document.getElementById(ALERT_NUM_IDS[a.key]);if(el)el.textContent=(counts[a.key]||0).toLocaleString();});
+  if(!window._hasCPData){const ncEl=document.getElementById('n-nocp');if(ncEl)ncEl.textContent='N/A';const ncCard=document.getElementById('card-nocp');if(ncCard)ncCard.style.opacity='0.45';}
+  const active=fData.filter(r=>r.dev>0&&r.cmd>0&&r.daysSince!==null);
+  const s90=active.length?Math.round(active.filter(r=>r.daysSince>90).length/active.length*100):0;
+  const s30=active.length?Math.round(active.filter(r=>r.daysSince<=30).length/active.length*100):0;
+  const ss=document.getElementById('silence-strip');
+  if(ss){
+    ss.style.display='';
+    const show90=lookback>90;
+    const s90stat=show90?`<div class="leg-sep"></div><span style="color:#c0392b"><strong>${s90}%</strong> silent 90+ days</span>`:'';
+    ss.innerHTML=`<span style="font-weight:500;color:#111">${fData.length.toLocaleString()} accounts in view</span><div class="leg-sep"></div><span>Active: <strong>${active.length.toLocaleString()}</strong></span>${s90stat}<div class="leg-sep"></div><span style="color:#1D9E75"><strong>${s30}%</strong> active last 30d</span>`;
+  }
+  applyFilters();
+}
+
+/* ═══ TEST TAB ═══ */
+function showTestDrilldown(title, rows, containerId){
+  containerId = containerId || 'pie-drilldown';
+  const dd=document.getElementById(containerId);
+  const sorted=[...rows].sort((a,b)=>b.dev-a.dev);
+  if(!sorted.length){dd.style.display='none';return;}
+  let page=0; const PG=20;
+  function render(){
+    dd.style.display='block';
+    const start=page*PG,end=start+PG,slice=sorted.slice(start,end),total=sorted.length,pages=Math.ceil(total/PG);
+    dd.innerHTML=`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:.5rem 1rem;background:#f8f7f3;border-bottom:1px solid #e5e2db">
+        <span style="font-size:12px;font-weight:600;color:#111">${title} <span style="color:#aaa;font-weight:400;font-size:11px">${total.toLocaleString()} accounts · sorted by devices</span></span>
+        <span style="cursor:pointer;color:#bbb;font-size:18px;line-height:1" onclick="document.getElementById('${containerId}').style.display='none'">×</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:#f8f7f3">
+            ${['#','Domain','Company','OEM','Devices','Cmd/dev','Days left','Last activity','Trial ends'].map(h=>`<th style="text-align:${['Devices','Cmd/dev','Days left'].includes(h)?'right':'left'};padding:.38rem .75rem;color:#888;font-weight:500;border-bottom:1px solid #e5e2db;position:sticky;top:0;background:#f8f7f3;white-space:nowrap">${h}</th>`).join('')}
+          </tr></thead>
+          <tbody>${slice.map((r,i)=>`<tr style="background:${i%2?'#faf9f6':'#fff'}">
+            <td style="padding:.3rem .75rem;color:#ccc;font-size:10px">${start+i+1}</td>
+            <td style="padding:.3rem .75rem;color:#111;font-weight:500">${r.d}</td>
+            <td style="padding:.3rem .75rem;color:#555">${r.co||'—'}</td>
+            <td style="padding:.3rem .75rem;color:#888;font-size:10px">${r.oem}</td>
+            <td style="padding:.3rem .75rem;text-align:right;font-weight:700;color:#111">${r.dev.toLocaleString()}</td>
+            <td style="padding:.3rem .75rem;text-align:right;color:#555">${r.cpd??'—'}</td>
+            <td style="padding:.3rem .75rem;text-align:right;color:${r.daysLeft!=null&&r.daysLeft<30?'#c0392b':r.daysLeft!=null&&r.daysLeft<90?'#e67e22':'#555'}">${r.daysLeft!=null?r.daysLeft+'d':'—'}</td>
+            <td style="padding:.3rem .75rem;color:#888;white-space:nowrap">${r.la||'—'}</td>
+            <td style="padding:.3rem .75rem;color:#888;white-space:nowrap">${r.te||'—'}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+      ${pages>1?`<div style="display:flex;align-items:center;justify-content:space-between;padding:.45rem 1rem;border-top:1px solid #f2f1ed;font-size:11px;color:#888">
+        <span>Showing ${start+1}–${Math.min(end,total)} of ${total.toLocaleString()}</span>
+        <div style="display:flex;gap:6px">
+          ${page>0?`<button onclick="page--;render();document.getElementById('${containerId}').scrollIntoView({behavior:'smooth',block:'nearest'})" style="font-size:11px;padding:3px 10px;border:1px solid #ddd;border-radius:5px;background:#fff;cursor:pointer">← Prev</button>`:''}
+          ${end<total?`<button onclick="page++;render();document.getElementById('${containerId}').scrollIntoView({behavior:'smooth',block:'nearest'})" style="font-size:11px;padding:3px 10px;border:1px solid #ddd;border-radius:5px;background:#fff;cursor:pointer">Next →</button>`:''}
+        </div>
+      </div>`:''}`;
+    dd.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+  render();
+}
+
+function buildTestTab(data, oemFilter){
+  if(!data.length||_buildTestTabLock) return;
+  _buildTestTabLock=true;
+  const DEAD_FILTER=r=>r.la&&r.daysSince!==null&&r.daysSince<=180;
+  const fData=(oemFilter==='all'?data:data.filter(r=>r.oem===oemFilter)).filter(DEAD_FILTER);
+  if(!fData.length){_buildTestTabLock=false;return;}
+  const total=fData.length;
+
+  // Populate OEM filter — build from allData directly
+  const sel=document.getElementById('oem-filter');
+  if(sel&&sel.options.length<=1){
+    const oemCount2={};data.forEach(r=>{oemCount2[r.oem]=(oemCount2[r.oem]||0)+1;});
+    const capO=o=>o?o[0].toUpperCase()+o.slice(1):o;
+    Object.entries(oemCount2).filter(([,n])=>n>=50).sort((a,b)=>capO(a[0]).localeCompare(capO(b[0])))
+      .forEach(([o])=>{const opt=document.createElement('option');opt.value=o;opt.textContent=`${capO(o)} (${oemCount2[o].toLocaleString()})`;sel.appendChild(opt);});
+  }
+
+  // ── Activation funnel ──
+  const enrolled=fData.filter(r=>r.dev>0).length;
+  const used=fData.filter(r=>r.cmd>0).length;
+  const active36=fData.filter(r=>r.daysSince!==null&&r.daysSince<=36).length;
+  const funnelEl=document.getElementById('ins-funnel');
+  if(funnelEl){
+    const steps=[
+      {l:'Total accounts',n:total,pct:100,c:'#888'},
+      {l:'Devices enrolled',n:enrolled,pct:Math.round(enrolled/total*100),c:'#378ADD'},
+      {l:'Used product',n:used,pct:Math.round(used/total*100),c:'#185FA5'},
+      {l:'Active last 36d',n:active36,pct:Math.round(active36/total*100),c:'#1D9E75',note:'Will improve once full last activity data is available'},
+    ];
+    funnelEl.innerHTML=steps.map(s=>`<div class="ins-bar-row"><div class="ins-bar-label">${s.l}${s.note?`<br><span style="font-size:9px;color:#aaa;font-style:italic">${s.note}</span>`:''}</div><div class="ins-bar-track"><div class="ins-bar-fill" style="width:${s.pct}%;background:${s.c}">${s.pct}%</div></div><div class="ins-bar-meta">${s.pct}% &nbsp;${s.n.toLocaleString()}</div></div>`).join('');
+  }
+
+  // ── Plan type split ──
+  const activeBase=fData.filter(r=>r.dev>0&&r.cmd>0);
+  const abTotal=activeBase.length;
+  const planSub=document.getElementById('ins-plan-sub');
+  if(planSub)planSub.textContent=`Based on ${abTotal.toLocaleString()} active accounts (devices > 0 and commands > 0) · filter will update when full last activity data is available`;
+  const planEl=document.getElementById('ins-plan');
+  if(planEl&&abTotal){
+    const plans=[
+      {l:'Limited plan',n:activeBase.filter(r=>r.lim).length,c:'#EF9F27'},
+      {l:'Full plan',n:activeBase.filter(r=>!r.lim&&!r.tr).length,c:'#1D9E75'},
+      {l:'Active trials',n:activeBase.filter(r=>r.tr).length,c:'#378ADD'},
+    ];
+    planEl.innerHTML=plans.map(p=>{const pct=Math.round(p.n/abTotal*100);return`<div class="ins-bar-row"><div class="ins-bar-label">${p.l}</div><div class="ins-bar-track"><div class="ins-bar-fill" style="width:${pct}%;background:${p.c}">${pct}%</div></div><div class="ins-bar-meta">${p.n.toLocaleString()} (${pct}%)</div></div>`;}).join('');
+  }
+
+  // ── Usage by account size ──
+  const sizeEl=document.getElementById('ins-size');
+  if(sizeEl){
+    const tiers=[
+      {l:'1–10 dev',fn:r=>r.dev>=1&&r.dev<=10},
+      {l:'11–50',fn:r=>r.dev>=11&&r.dev<=50},
+      {l:'51–200',fn:r=>r.dev>=51&&r.dev<=200},
+      {l:'201–500',fn:r=>r.dev>=201&&r.dev<=500},
+      {l:'500+ dev',fn:r=>r.dev>500},
+    ];
+    sizeEl.innerHTML=tiers.map(t=>{
+      const group=fData.filter(t.fn);
+      const total_g=group.length;
+      if(!total_g)return'';
+      const active_g=group.filter(r=>r.cmd>0).length;
+      const pct=Math.round(active_g/total_g*100);
+      const avgCmd=total_g?Math.round(group.reduce((s,r)=>s+r.cmd,0)/total_g):0;
+      return`<div class="ins-bar-row"><div class="ins-bar-label">${t.l}</div><div class="ins-bar-track"><div class="ins-bar-fill" style="width:${pct}%;background:#378ADD">${pct}%</div></div><div class="ins-bar-meta">${pct}% &nbsp;<span style="color:#bbb">${avgCmd} avg cmds &nbsp;${total_g.toLocaleString()} accts</span></div></div>`;
+    }).join('');
+  }
+
+  // ── Upsell ──
+  const upsellEl=document.getElementById('ins-upsell');
+  if(upsellEl){
+    const upsellTiers=[
+      {l:'1–10 dev',fn:r=>r.dev>=1&&r.dev<=10},
+      {l:'11–50',fn:r=>r.dev>=11&&r.dev<=50},
+      {l:'51–200',fn:r=>r.dev>=51&&r.dev<=200},
+      {l:'201–500',fn:r=>r.dev>=201&&r.dev<=500},
+      {l:'500+ dev',fn:r=>r.dev>500},
+    ];
+    upsellEl.innerHTML=upsellTiers.map(t=>{
+      const n=fData.filter(r=>r.lim&&r.cmd>0&&t.fn(r)).length;
+      return`<div class="upsell-card"><div class="upsell-tier">${t.l}</div><div class="upsell-num">${n.toLocaleString()}</div><div class="upsell-sub">limited + active</div></div>`;
+    }).join('');
+  }
+
+  // ── OEM Pie charts — always computed from live allData so every OEM works ──
+  const tGrid=document.getElementById('pie-grid');
+  if(!tGrid){_buildTestTabLock=false;return;}
+  if(!allData.length){tGrid.innerHTML='<div class="info-note">Load your first xlsx to see charts</div>';}
+  else{
+    // Build entries from live allData (not snapshot) so all OEMs are covered
+    const livePieFns=[
+      r=>true,
+      r=>r.dev===0,
+      r=>r.f.includes('single_dev'),
+      r=>r.cr!==null&&r.cr<0,
+    ];
+    const pieTitles=['Accounts by OEM','0-device accounts by OEM','1-device stalled accounts by OEM','Negative credits by OEM'];
+    const pieDrillFns=[
+      (oem)=>r=>r.oem===oem,
+      (oem)=>r=>r.oem===oem&&r.dev===0,
+      (oem)=>r=>r.oem===oem&&r.f.includes('single_dev'),
+      (oem)=>r=>r.oem===oem&&r.cr!==null&&r.cr<0,
+    ];
+
+    tGrid.innerHTML=pieTitles.map((title,pi)=>`<div class="pie-card"><div class="pie-card-title">${title} <span style="font-size:9px;color:#bbb;font-weight:400">· click slice</span></div><div class="pie-wrap"><canvas id="pie-${pi}" style="cursor:pointer"></canvas></div><div class="pie-legend" id="pie-leg-${pi}"></div></div>`).join('');
+
+    pieTitles.forEach((title,pi)=>{
+      // Count by OEM from live allData
+      const base=allData.filter(livePieFns[pi]);
+      const oemMap={};
+      base.forEach(r=>{oemMap[r.oem]=(oemMap[r.oem]||0)+1;});
+      let entries=Object.entries(oemMap).sort((a,b)=>b[1]-a[1]);
+      if(oemFilter!=='all')entries=entries.filter(([oem])=>oem===oemFilter);
+      else entries=entries.slice(0,10); // cap at 10 for readability
+      if(!entries.length){document.getElementById(`pie-leg-${pi}`).innerHTML='<div class="info-note">No data for selected OEM</div>';return;}
+      const labels=entries.map(([oem])=>oem);
+      const vals=entries.map(([,n])=>n);
+      const colors=PIE_COLORS.slice(0,labels.length);
+      const total_p=vals.reduce((s,v)=>s+v,0);
+      const cid=`pie-${pi}`;
+      if(chartInstances[cid])chartInstances[cid].destroy();
+      chartInstances[cid]=safeChart(cid,{
+        type:'doughnut',
+        data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:2,borderColor:'#fff'}]},
+        options:{
+          responsive:true,maintainAspectRatio:false,
+          onClick(evt,elements){
+            if(!elements.length)return;
+            const oem=labels[elements[0].index];
+            const dd=document.getElementById('pie-drilldown');
+            const key=`${pi}-${oem}`;
+            if(_tActivePieKey===key&&dd.style.display!=='none'){dd.style.display='none';_tActivePieKey='';return;}
+            _tActivePieKey=key;
+            showTestDrilldown(`${title} — ${oem}`,allData.filter(pieDrillFns[pi](oem)),'pie-drilldown');
+          },
+          plugins:{
+            legend:{display:false},
+            tooltip:{callbacks:{label:c=>`${c.label}: ${c.parsed.toLocaleString()} (${total_p>0?Math.round(c.parsed/total_p*100):0}%)`}},
+            datalabels:{display:false}
+          },
+          layout:{padding:10}
+        },
+        plugins:[{
+          id:`pieLabels${pi}`,
+          afterDraw(chart){
+            const {ctx}=chart;
+            chart.data.datasets.forEach((dataset,di)=>{
+              chart.getDatasetMeta(di).data.forEach((arc,i)=>{
+                const val=dataset.data[i];
+                const pct=total_p>0?Math.round(val/total_p*100):0;
+                if(pct<5)return;
+                const label=labels.length===1?val.toLocaleString():pct+'%';
+                const mid=(arc.startAngle+arc.endAngle)/2;
+                const r=arc.outerRadius*0.65;
+                const x=arc.x+Math.cos(mid)*r;
+                const y=arc.y+Math.sin(mid)*r;
+                ctx.save();ctx.fillStyle='#fff';ctx.font='bold 11px -apple-system,sans-serif';
+                ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,x,y);ctx.restore();
+              });
+            });
+          }
+        }]
+      });
+      document.getElementById(`pie-leg-${pi}`).innerHTML=labels.slice(0,6).map((l,i)=>`<div class="pie-leg-row"><div class="pie-leg-dot" style="background:${colors[i]}"></div>${l}<span style="margin-left:auto;color:#aaa;font-size:10px">${vals[i].toLocaleString()} (${total_p>0?Math.round(vals[i]/total_p*100):0}%)</span></div>`).join('');
+    });
+  }
+
+  // ── Trend lines (reuse same snapshots, date filters from t-date-from/to) ──
+  const tBlock=document.getElementById('trend-charts-block');
+  if(!tBlock){_buildTestTabLock=false;return;}
+  const fromVal=document.getElementById('date-from')?.value;
+  const toVal=document.getElementById('date-to')?.value;
+  // Populate date dropdowns if empty
+  const tFrom=document.getElementById('date-from');
+  const tTo=document.getElementById('date-to');
+  if(tFrom&&!tFrom.dataset.populated&&snapshots.length){
+    tFrom.dataset.populated='1';tTo.dataset.populated='1';
+    snapshots.forEach(s=>{
+      const o1=document.createElement('option');o1.value=s.date;o1.textContent=s.date;tFrom.appendChild(o1);
+      const o2=document.createElement('option');o2.value=s.date;o2.textContent=s.date;tTo.appendChild(o2);
+    });
+  }
+  let tSnaps=snapshots;
+  if(fromVal)tSnaps=tSnaps.filter(s=>s.date>=fromVal);
+  if(toVal)tSnaps=tSnaps.filter(s=>s.date<=toVal);
+  // Show bar chart for 1 file, line chart for 2+
+  if(tSnaps.length<1){tBlock.innerHTML='<div class="info-note">Load a weekly file to see charts</div>';}
+  else{
+    const singleSnap=tSnaps.length===1;
+    const dates=tSnaps.map(s=>s.date);
+    const cats=['churn','inactive','billing','ops'];
+    const catLabels={churn:'Churn risk',inactive:'Inactive',billing:'Billing / upsell',ops:'Ops / data'};
+    const catClass={churn:'cat-churn',inactive:'cat-inactive',billing:'cat-billing',ops:'cat-ops'};
+    tBlock.innerHTML=cats.map(cat=>{
+      const alerts=ALERTS.filter(a=>a.cat===cat);
+      return`<div class="cat-section"><div class="cat-label ${catClass[cat]}">${catLabels[cat]}</div><div class="charts-grid">${alerts.map(a=>`<div class="chart-card"><div class="chart-title">${a.label}</div><div class="chart-num" id="tn-${a.key}">—</div><div class="chart-delta" id="td-${a.key}">${singleSnap?'<span style="font-size:9px;color:#bbb">load 2nd file for trend</span>':''}</div><div class="chart-wrap"><canvas id="tc-${a.key}"></canvas></div></div>`).join('')}</div></div>`;
+    }).join('');
+    cats.forEach(cat=>{
+      ALERTS.filter(a=>a.cat===cat).forEach((a,ai)=>{
+        const vals=tSnaps.map(s=>s.counts[a.key]||0);
+        const latest=vals[vals.length-1],prev=vals.length>1?vals[vals.length-2]:null;
+        const tnEl=document.getElementById(`tn-${a.key}`);if(tnEl)tnEl.textContent=latest.toLocaleString();
+        if(prev!==null){const diff=latest-prev,pct=prev>0?((diff/prev)*100).toFixed(1):'100';const el=document.getElementById(`td-${a.key}`);if(el){if(diff>0){el.className='chart-delta delta-up';el.textContent=`▲ ${Math.abs(diff).toLocaleString()} (+${pct}%)`;}else if(diff<0){el.className='chart-delta delta-down';el.textContent=`▼ ${Math.abs(diff).toLocaleString()} (${pct}%)`;}else{el.className='chart-delta delta-flat';el.textContent='No change';}}}
+        const cid=`tc-${a.key}`;
+        const color=(CAT_COLORS[cat]||['#aaa'])[ai%(CAT_COLORS[cat]||['#aaa']).length];
+        if(singleSnap){
+          chartInstances[cid]=safeChart(cid,{type:'bar',data:{labels:[dates[0]],datasets:[{data:vals,backgroundColor:color+'99',borderColor:color,borderWidth:1.5,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y.toLocaleString()} accounts`}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#aaa'}},y:{grid:{color:'#f2f1ed'},ticks:{font:{size:9},color:'#aaa'},beginAtZero:true}}}});
+        } else {
+          chartInstances[cid]=safeChart(cid,{type:'line',data:{labels:dates,datasets:[{data:vals,borderColor:color,backgroundColor:color+'22',borderWidth:2,pointBackgroundColor:color,pointRadius:3,fill:true,tension:.3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y.toLocaleString()} accounts`}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#aaa',maxRotation:45}},y:{grid:{color:'#f2f1ed'},ticks:{font:{size:9},color:'#aaa'},beginAtZero:false}}}});
+        }
+      });
+    });
+  }
+
+  // ── Snapshots table ──
+  const _stb=document.getElementById('snap-tbl-body');if(_stb)_stb.innerHTML=snapshots.map((s,i)=>`<tr><td>${s.date}</td><td>${s.filename}</td><td>${s.total.toLocaleString()}</td><td>${(s.counts.stale_large||0).toLocaleString()}</td><td>${(s.counts.declining||0).toLocaleString()}</td><td>${(s.counts.renewal_expired||0).toLocaleString()}</td><td>${(s.counts.expiry_30||0).toLocaleString()}</td><td><span class="snap-del" onclick="deleteSnap(${i})">×</span></td></tr>`).join('');
+  _buildTestTabLock=false;
+}
+
+/* ═══ INIT ═══ */
+(async function(){
+  await loadSnaps();
+  renderSnapsBar();
+  const vs=document.getElementById('viewer-status');
+  if(snapshots.length){
+    const b=document.getElementById('snap-badge');
+    b.textContent=snapshots.length;b.style.display='';
+    populateTrendFilters();
+    if(vs)vs.textContent=snapshots.length+' snapshot'+(snapshots.length>1?'s':'')+' loaded · last: '+snapshots[snapshots.length-1]?.date;
+  } else {
+    if(vs)vs.textContent='No data yet — admin will upload soon';
+  }
+})();
+</script>
+</body>
+</html>
