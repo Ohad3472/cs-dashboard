@@ -718,23 +718,51 @@ const SUPA_WRITE_HDR={'apikey':SUPA_SERVICE,'Authorization':'Bearer '+SUPA_SERVI
 
 async function loadSnaps(){
   try{
-    const r=await fetch(SUPA_URL+'/rest/v1/snapshots?select=snap_data&order=report_date.asc',{headers:SUPA_HDR});
+    const r=await fetch(SUPA_URL+'/rest/v1/snapshots?select=report_date,snap_data,account_data&order=report_date.asc',{headers:SUPA_HDR});
     const d=await r.json();
-    if(Array.isArray(d))snapshots=d.map(x=>x.snap_data).filter(Boolean);
-    else snapshots=[];
+    if(Array.isArray(d)){
+      snapshots=d.map(x=>x.snap_data).filter(Boolean);
+      // Restore latest account data
+      const latest=d[d.length-1];
+      if(latest?.account_data){
+        try{
+          const bin=atob(latest.account_data);
+          const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));
+          const stream=new DecompressionStream('gzip');
+          const writer=stream.writable.getWriter();
+          writer.write(bytes);writer.close();
+          const out=await new Response(stream.readable).text();
+          const lean=JSON.parse(out);
+          // Reconstruct allData rows
+          allData=lean.map(r=>({d:r.d,co:r.co,ct:r.ct,email:r.em,oem:r.oem,dev:r.dev,cmd:r.cmd,
+            cr:r.cr,daysSince:r.ds,daysCreated:r.dc,la:r.la,trial:r.tr,trDays:r.td,lim:r.lim,lowP:r.lp,
+            f:r.f||[],tl:r.tl||'amber'}));
+          console.log('Restored',allData.length,'accounts from Supabase');
+        }catch(e){console.error('Decompress error:',e);}
+      }
+    } else snapshots=[];
   }catch(e){console.error('loadSnaps:',e);snapshots=[];}
 }
 
 async function saveSnaps(){
-  if(!snapshots.length)return;
+  if(!snapshots.length||!allData.length)return;
   const snap=snapshots[snapshots.length-1];
+  // Compress full account data
+  const lean=allData.map(r=>({d:r.d,co:r.co,ct:r.ct,em:r.email,oem:r.oem,dev:r.dev,cmd:r.cmd,
+    cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.trial,td:r.trDays,lim:r.lim,lp:r.lowP,
+    f:r.f,tl:r.tl}));
+  const raw=JSON.stringify(lean);
+  const blob=new Blob([raw],{type:'text/plain'});
+  const stream=blob.stream().pipeThrough(new CompressionStream('gzip'));
+  const compressed=await new Response(stream).arrayBuffer();
+  const b64=btoa(String.fromCharCode(...new Uint8Array(compressed)));
   const r=await fetch(SUPA_URL+'/rest/v1/snapshots',{
     method:'POST',
     headers:{...SUPA_WRITE_HDR,'Prefer':'resolution=merge-duplicates'},
-    body:JSON.stringify({report_date:snap.date,filename:snap.filename,snap_data:snap})
+    body:JSON.stringify({report_date:snap.date,filename:snap.filename,snap_data:snap,account_data:b64})
   });
   if(!r.ok){const err=await r.text();console.error('Supabase save error:',r.status,err);}
-  else{console.log('Saved to Supabase OK:',snap.date);}
+  else{console.log('Saved to Supabase OK:',snap.date,'accounts:',lean.length);}
 }
 
 async function deleteSnapRemote(date){
@@ -2094,6 +2122,35 @@ function buildTestTab(data, oemFilter){
   await loadSnaps();
   renderSnapsBar();
   if(snapshots.length){const b=document.getElementById('snap-badge');b.textContent=snapshots.length;b.style.display='';populateTrendFilters();}
+  // If account data was restored, render the full dashboard
+  if(allData.length>0){
+    filtered=[...allData];
+    populateDashOemFilter();
+    const _dashSel=document.getElementById('dash-oem-filter');if(_dashSel)_dashSel.value='all';
+    const _dashLb=document.getElementById('dash-lookback');if(_dashLb)_dashLb.value='180';
+    filterDashAlerts();
+    const _ss=document.getElementById('silence-strip');if(_ss)_ss.style.display='';
+    renderTrialTable();
+    buildTestTab(allData,'all');
+    // Update header
+    if(snapshots.length){
+      const snap=snapshots[snapshots.length-1];
+      const sub=document.getElementById('dash-sub');
+      if(sub)sub.textContent=`${allData.length.toLocaleString()} accounts · ${snap.filename} · ${snap.date}`;
+    }
+    // Show loaded state in drop zone
+    const dz=document.getElementById('drop-zone');
+    if(dz&&snapshots.length){
+      const snap=snapshots[snapshots.length-1];
+      dz.innerHTML=`<div style="display:flex;align-items:center;gap:12px;padding:.5rem .75rem;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:#0F6E56;font-weight:500">✓ ${snap.filename} (${snap.date}) — ${allData.length.toLocaleString()} accounts</span>
+        <button id="load-btn" style="font-size:11px;font-weight:600;padding:5px 14px;border-radius:6px;border:1.5px solid #0F6E56;background:#fff;color:#0F6E56;cursor:pointer;white-space:nowrap">⬆ Load new file</button>
+        <span style="font-size:10px;color:#aaa">or drag &amp; drop</span>
+      </div><input type="file" id="file-input" accept=".xlsx,.xls,.csv" onchange="handleFile(this.files[0])" style="display:none">`;
+      document.getElementById('load-btn').addEventListener('click',e=>{e.stopPropagation();document.getElementById('file-input').click();});
+      _dragDepth=0;attachDrag(dz);
+    }
+  }
 })();
 </script>
 </body>
