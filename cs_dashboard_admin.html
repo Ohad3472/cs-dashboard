@@ -381,14 +381,14 @@ if(sessionStorage.getItem('cs_auth')==='1'){
           <div class="acard c-r" id="card-stale-large" data-filter="stale_large" data-panel="panel-stale">
             <div class="card-num" id="n-stale">—</div><div class="card-label">Large accounts — gone silent</div><div class="card-sub">51+ devices · no activity</div>
           </div>
-          <div class="acard c-r" data-filter="declining" data-panel="panel-declining">
-            <div class="card-num" id="n-declining">—</div><div class="card-label">Small accounts — gone dark</div><div class="card-sub">≤50 devices · proven user · silent 30+ days</div>
+          <div class="acard c-r" data-filter="trial_expiring" data-panel="panel-trial-expiring">
+            <div class="card-num" id="n-trial-expiring">—</div><div class="card-label">Trial — ending soon</div><div class="card-sub">Active trial · &lt;7 days left</div>
           </div>
           <div class="acard c-r" data-filter="never_enrolled" data-panel="panel-never-enrolled">
             <div class="card-num" id="n-never-enrolled">—</div><div class="card-label">Signed up — never started</div><div class="card-sub">0 devices · has contact info</div>
           </div>
-          <div class="acard c-r" data-filter="trial_expiring" data-panel="panel-trial-expiring">
-            <div class="card-num" id="n-trial-expiring">—</div><div class="card-label">Trial — ending soon</div><div class="card-sub">Active trial · &lt;30 days left</div>
+          <div class="acard c-r" data-filter="declining" data-panel="panel-declining">
+            <div class="card-num" id="n-declining">—</div><div class="card-label">Small accounts — gone dark</div><div class="card-sub">≤50 devices · proven user · silent 30+ days</div>
           </div>
         </div>
       </div>
@@ -415,17 +415,17 @@ if(sessionStorage.getItem('cs_auth')==='1'){
       <div class="alert-row">
         <div class="row-pill pill-billing">Billing<br>upsell</div>
         <div class="cards-row">
-          <div class="acard c-b" data-filter="large_limited">
-            <div class="card-num" id="n-llim">—</div><div class="card-label">Upsell opportunity</div><div class="card-sub">51+ devices · on limited plan</div>
-          </div>
           <div class="acard c-b" data-filter="neg_cred">
             <div class="card-num" id="n-negcred">—</div><div class="card-label">Negative credits</div><div class="card-sub">Billing anomaly</div>
+          </div>
+          <div class="acard c-b" data-filter="expiry_30">
+            <div class="card-num" id="n-expiry30">—</div><div class="card-label">Credits expiring — 30d</div><div class="card-sub">Credits budget ending within 30 days</div>
           </div>
           <div class="acard c-b" data-filter="expiry_90" data-panel="panel-expiry">
             <div class="card-num" id="n-expiry90">—</div><div class="card-label">Credits expiring — 90d</div><div class="card-sub">Credits budget ending within 90 days</div>
           </div>
-          <div class="acard c-b" data-filter="expiry_30">
-            <div class="card-num" id="n-expiry30">—</div><div class="card-label">Credits expiring — 30d</div><div class="card-sub">Credits budget ending within 30 days</div>
+          <div class="acard c-b" data-filter="large_limited">
+            <div class="card-num" id="n-llim">—</div><div class="card-label">Upsell opportunity</div><div class="card-sub">51+ devices · on limited plan</div>
           </div>
         </div>
       </div>
@@ -433,13 +433,13 @@ if(sessionStorage.getItem('cs_auth')==='1'){
       <div class="alert-row">
         <div class="row-pill pill-billing" style="visibility:hidden"></div>
         <div class="cards-row">
-          <div class="acard c-b" data-filter="renewal_exp90">
-            <div class="new-badge">NEW</div>
-            <div class="card-num" id="n-renewal90">—</div><div class="card-label">Agreement expiring — 90d</div><div class="card-sub">Agreement ending soon</div>
-          </div>
           <div class="acard c-b" data-filter="renewal_expired">
             <div class="new-badge">NEW</div>
             <div class="card-num" id="n-renewal-exp">—</div><div class="card-label">Agreement expired</div><div class="card-sub">Agreement has lapsed</div>
+          </div>
+          <div class="acard c-b" data-filter="renewal_exp90">
+            <div class="new-badge">NEW</div>
+            <div class="card-num" id="n-renewal90">—</div><div class="card-label">Agreement expiring — 90d</div><div class="card-sub">Agreement ending soon</div>
           </div>
           <div class="acard placeholder"><div style="font-size:10px;color:#ccc;text-align:center">More signals<br>coming soon</div></div>
           <div class="acard placeholder"><div style="font-size:10px;color:#ccc;text-align:center">More signals<br>coming soon</div></div>
@@ -753,7 +753,7 @@ async function loadSnaps(){
           // Reconstruct allData rows
           allData=lean.map(r=>({d:r.d||'',co:r.co||'',ct:r.ct||'',email:r.em||'',oem:r.oem||'undefined',
             dev:r.dev||0,cmd:r.cmd||0,cr:r.cr!=null?r.cr:null,daysSince:r.ds!=null?r.ds:null,
-            daysCreated:r.dc!=null?r.dc:null,la:r.la||'',tr:r.tr||false,trDays:r.td!=null?r.td:null,
+            daysCreated:r.dc!=null?r.dc:null,la:r.la||'',tr:r.tr||false,trDays:r.td!=null?r.td:null,daysIntoTrial:r.di!=null?r.di:null,
             lim:r.lim||false,lowP:r.lp||0,f:r.f||[],tl:r.tl||'amber',
             cpd:r.dev>0?Math.round(r.cmd/r.dev*10)/10:0,
             created:r.la||''}));
@@ -768,7 +768,7 @@ async function saveSnaps(){
   if(!snapshots.length||!allData.length)return;
   const snap=snapshots[snapshots.length-1];
   const lean=allData.map(r=>({d:r.d,co:r.co,ct:r.ct,em:r.email,oem:r.oem,dev:r.dev,cmd:r.cmd,
-    cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.tr,td:r.trDays,lim:r.lim,lp:r.lowP,
+    cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.tr,td:r.trDays,di:r.daysIntoTrial,lim:r.lim,lp:r.lowP,
     f:r.f,tl:r.tl}));
   const raw=JSON.stringify(lean);
   // Compress using CompressionStream with chunked reading
@@ -1002,7 +1002,7 @@ function processData(raw,filename,dateStr){
     if(dev>=51&&la&&daysSince!==null&&daysSince>30)                  flags.push('stale_large');
     if(dev>0&&dev<=50&&cmd>0&&daysSince!==null&&daysSince>=DECLINE_DAYS) flags.push('declining');
     if(dev===0&&hasContact)                                          flags.push('never_enrolled');
-    if(trialActive&&trDays<=30)                                      flags.push('trial_expiring');
+    if(trialActive&&trDays<=7)                                       flags.push('trial_expiring');
     if(dev>0&&cmd===0)                                               flags.push('enrolled_never');
     if(dev>0&&cmd>0&&la&&cpd<LOW_CMD)                               flags.push('low_cmd');
     if(allLP)                                                        flags.push('all_lowpriv');
@@ -1215,6 +1215,18 @@ function changePage(d){page+=d;renderTable();window.scrollTo(0,document.getEleme
 
 /* ═══ TRIAL MONITOR TABLE ═══ */
 function renderTrialTable(){
+  // Always update summary cards (works on both CSV upload and Supabase restore)
+  const tmRed=trialData.filter(r=>r.tl==='red').length;
+  const tmAmber=trialData.filter(r=>r.tl==='amber').length;
+  const tmGreen=trialData.filter(r=>r.tl==='green').length;
+  const tmNoDev=trialData.filter(r=>r.dev===0).length;
+  setText('tm-red',tmRed.toLocaleString());
+  setText('tm-amber',tmAmber.toLocaleString());
+  setText('tm-green',tmGreen.toLocaleString());
+  setText('tm-total',trialData.length.toLocaleString());
+  setText('tm-nodev',tmNoDev.toLocaleString());
+  const badge=document.getElementById('trial-badge');
+  if(badge){badge.textContent=trialData.length;badge.style.display='';}
   const tlFilter=document.getElementById('tm-tl-filter')?.value||'all';
   const oemFilter=document.getElementById('tm-oem-filter')?.value||'all';
   const q=(document.getElementById('tm-search')?.value||'').toLowerCase();
@@ -1620,7 +1632,7 @@ const GUIDE_ALERTS = [
   {cat:'churn', name:'Large accounts — gone silent',  condition:'dev ≥51 · has last activity · active within window · silent >30d', threshold:'51+ dev · silent 30+ days', why:'· High-value accounts that were active but stopped<br>· Count grows as window extends<br>· Priority churn conversations'},
   {cat:'churn', name:'Small accounts — gone dark',    condition:'dev >0 · cmd >0 · silent >30d',                                          threshold:'30 days silent',            why:'· Was active, now gone dark<br>· Still has devices — recoverable'},
   {cat:'churn', name:'Signed up — never started',    condition:'dev =0 · has email OR company OR activity',                                 threshold:'0 devices, reachable',      why:'· Signed up but never set up<br>· CS has a contact to reach'},
-  {cat:'churn', name:'Trial — ending soon',          condition:'trial=TRUE · 0 < days left ≤30',                                       threshold:'30 days remaining',         why:'· &lt;3d critical · &lt;15d high · &lt;30d mid risk<br>· See Trial Monitor for full detail'},
+  {cat:'churn', name:'Trial — ending soon',          condition:'trial=TRUE · 0 < days left ≤30',                                       threshold:'7 days remaining',          why:'· Active trial expiring within 7 days<br>· See Trial Monitor for full breakdown'},
   {cat:'inactive', name:'Accounts w. devices — no usage', condition:'dev >0 · cmd =0',                                                     threshold:'0 commands ever',           why:'· Devices enrolled, product never touched<br>· Strongest inactivity signal'},
   {cat:'inactive', name:'Low usage',                           condition:'dev >0 · cmd >0 · has activity · cmd/dev <2',                   threshold:'<2 cmd/device',             why:'· Below median usage for active base<br>· Worth a check-in call'},
   {cat:'inactive', name:'Limited accounts',                    condition:'low-priv devices = total devices',                                        threshold:'100% low-priv',             why:'· All devices lack system permissions<br>· Core features blocked — one CS call fixes'},
@@ -1825,6 +1837,8 @@ function filterDashAlerts(){
 
   // stale_large: 51+ devices, within lookback window (alive), silent 30+ days
   counts.stale_large=fData.filter(r=>r.dev>=51&&r.la&&r.daysSince!==null&&r.daysSince>30).length;
+  // trial_expiring: no dead filter — match Trial Monitor count
+  counts.trial_expiring=baseData.filter(r=>r.f&&r.f.includes('trial_expiring')).length;
   // Grey out stale_large card when window ≤ 30 days (mathematically impossible to have value)
   const staleLargeCard=document.getElementById('card-stale-large');
   if(staleLargeCard){staleLargeCard.style.opacity=lookback<=30?'0.35':'1';staleLargeCard.title=lookback<=30?'Cannot show: window too short (need >30 days to detect silence)':'';}
