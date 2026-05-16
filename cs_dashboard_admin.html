@@ -803,7 +803,7 @@ async function loadSnaps(){
           // Reconstruct allData rows
           allData=lean.map(r=>({d:r.d||'',co:r.co||'',ct:r.ct||'',email:r.em||'',oem:r.oem||'undefined',
             dev:r.dev||0,cmd:r.cmd||0,cr:r.cr!=null?r.cr:null,daysSince:r.ds!=null?r.ds:null,
-            daysCreated:r.dc!=null?r.dc:null,la:r.la||'',tr:r.tr||false,trDays:r.td!=null?r.td:null,
+            daysCreated:r.dc!=null?r.dc:null,la:r.la||'',tr:r.tr||false,trDays:r.td!=null?r.td:null,daysIntoTrial:r.di!=null?r.di:null,
             lim:r.lim||false,lowP:r.lp||0,f:r.f||[],tl:r.tl||'amber',
             cpd:r.dev>0?Math.round(r.cmd/r.dev*10)/10:0,
             created:r.la||''}));
@@ -818,7 +818,7 @@ async function saveSnaps(){
   if(!snapshots.length||!allData.length)return;
   const snap=snapshots[snapshots.length-1];
   const lean=allData.map(r=>({d:r.d,co:r.co,ct:r.ct,em:r.email,oem:r.oem,dev:r.dev,cmd:r.cmd,
-    cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.tr,td:r.trDays,lim:r.lim,lp:r.lowP,
+    cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.tr,td:r.trDays,di:r.daysIntoTrial,lim:r.lim,lp:r.lowP,
     f:r.f,tl:r.tl}));
   const raw=JSON.stringify(lean);
   // Compress using CompressionStream with chunked reading
@@ -1833,6 +1833,7 @@ function renderGuide(){
       <div><div style="font-size:11px;background:#EEEDFE;padding:3px 8px;border-radius:3px;color:#534AB7;font-family:monospace">last_activity within 180 days (replaces dev>0 AND cmd>0)</div><div class="guide-why" style="margin-top:3px">· Data now available — ready to activate</div></div>
     </div>\`;
 }
+
 /* ═══ INSIGHT SECTIONS ═══ (old trends - keep for compatibility) */
 /* ═══ PIE DRILLDOWN ═══ */
 let _pieDrillRows=[],_pieDrillTitle='',_pieDrillPage=0;

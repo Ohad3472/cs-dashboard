@@ -648,65 +648,90 @@ select.filter-sel{font-size:12px;padding:4px 10px;border:1px solid #ddd;border-r
 </div>
 
 <!-- ═══ ALERT GUIDE TAB ═══ -->
+<div class="tab-content" id="tab-insights">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:.65rem 1rem;background:#fff;border:1px solid #e5e2db;border-radius:10px;margin-bottom:1rem">
+    <span style="font-size:11px;font-weight:500;color:#555">Filter by OEM:</span>
+    <select id="oem-filter" onchange="buildTestTab(allData,this.value)"><option value="all">All OEMs</option></select>
+    <span style="font-size:11px;color:#aaa;margin-left:auto">Updates when you load a new xlsx</span>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:1rem">
+    <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem">
+      <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.6rem;display:flex;align-items:baseline">Activation funnel <span style="font-size:10px;color:#aaa;font-style:italic;font-weight:400;margin-left:auto">% of total accounts</span></div>
+      <div id="ins-funnel"></div>
+    </div>
+    <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem">
+      <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.6rem;display:flex;align-items:baseline">Plan type split <span style="font-size:10px;color:#aaa;font-style:italic;font-weight:400;margin-left:auto">active accounts only</span></div>
+      <div style="font-size:10px;color:#aaa;margin-bottom:.4rem" id="ins-plan-sub"></div>
+      <div id="ins-plan"></div>
+    </div>
+    <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem">
+      <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.6rem;display:flex;align-items:baseline">Usage by account size <span style="font-size:10px;color:#aaa;font-style:italic;font-weight:400;margin-left:auto">% with commands</span></div>
+      <div id="ins-size"></div>
+    </div>
+  </div>
+
+  <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem;margin-bottom:1rem">
+    <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.4rem;display:flex;align-items:baseline">Limited plan but active — upsell targets <span style="font-size:10px;color:#aaa;font-style:italic;font-weight:400;margin-left:auto">by account size · filtered by OEM selector above</span></div>
+    <div class="upsell-grid" id="ins-upsell"></div>
+    <div style="font-size:10px;color:#aaa;margin-top:.5rem">On a limited plan but genuinely using the product — warmest upsell leads for CS and account management.</div>
+  </div>
+
+  <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem;margin-bottom:1rem">
+    <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.65rem">OEM breakdown <span style="font-size:10px;color:#aaa;font-weight:400;font-style:italic;margin-left:8px">from latest upload</span></div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;overflow:hidden" id="pie-grid"><div class="info-note">Load your xlsx to see charts</div></div>
+    <div id="pie-drilldown" style="display:none;margin-top:10px;background:#fff;border:1px solid #e5e2db;border-radius:10px;overflow:hidden"></div>
+  </div>
+
+  <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem;margin-bottom:1rem">
+    <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.65rem">Weekly trend lines <span style="font-size:10px;color:#aaa;font-weight:400;font-style:italic;margin-left:8px">load 2+ weekly files to compare</span></div>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:.75rem;flex-wrap:wrap">
+      <span style="font-size:11px;color:#555">Date range:</span>
+      <select id="date-from" onchange="buildTestTab(allData,document.getElementById('oem-filter').value)"><option value="">From — all</option></select>
+      <span style="font-size:12px;color:#aaa">to</span>
+      <select id="date-to" onchange="buildTestTab(allData,document.getElementById('oem-filter').value)"><option value="">To — all</option></select>
+      <button class="btn" onclick="document.getElementById('date-from').value='';document.getElementById('date-to').value='';buildTestTab(allData,document.getElementById('oem-filter').value)" style="margin-left:auto">Reset</button>
+    </div>
+    <div id="trend-charts-block" style="overflow:hidden"><div class="info-note">Load 2 or more weekly files to see trend lines</div></div>
+    <div style="margin-top:1.5rem">
+      <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin-bottom:.5rem">Loaded snapshots</div>
+      <div class="tbl-wrap"><table class="snap-tbl">
+        <thead><tr><th>Date</th><th>Filename</th><th>Accounts</th><th>Stale large</th><th>Declining</th><th>Renewals expired</th><th>Expiring 30d</th><th></th></tr></thead>
+        <tbody id="snap-tbl-body"></tbody>
+      </table></div>
+    </div>
+  </div>
+  <div id="ins-drilldown" style="display:none;background:#fff;border:1px solid #e5e2db;border-radius:10px;overflow:hidden;margin-top:10px"></div>
+</div>
+
+<!-- ═══ DATA CLEANSING TAB ═══ -->
+<div class="tab-content" id="tab-cleansing">
+  <div style="background:#fff8f0;border:1px solid #fde8c8;border-radius:10px;padding:.75rem 1rem;margin-bottom:1rem;font-size:11px;color:#666;line-height:1.65">
+    These accounts have data quality or reachability issues. They are <strong>excluded from all Dashboard alert counts</strong> and should be passed to the <strong>data/ops team</strong>, not CS.
+  </div>
+  <div id="dc-content"><div class="info-note">Load your xlsx to see data cleansing analysis</div></div>
+</div>
+
+<!-- ═══ ALERT GUIDE TAB ═══ -->
 <div class="tab-content" id="tab-guide">
-  <!-- TAB 1: DASHBOARD -->
-  <div id="guide-sec-dashboard" style="margin-bottom:2rem">
-    <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:#333;border-radius:6px;padding:4px 12px;display:inline-block;margin-bottom:.8rem">Dashboard tab</div>
-
-    <!-- Global exclusions -->
-    <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin:.8rem 0 .4rem">Global exclusions (applied before all counts)</div>
-    <div id="guide-exclusions"></div>
-
-    <!-- TL Score -->
-    <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin:1.2rem 0 .4rem">TL score — churn risk colour dot</div>
+  <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1.1rem;margin-bottom:1rem;font-size:11px;color:#666;line-height:1.65">
+    Each alert below shows its exact conditions and current threshold. These can be adjusted — contact the dashboard owner to change a threshold.
+  </div>
+  <div id="guide-churn"></div>
+  <div id="guide-inactive"></div>
+  <div id="guide-billing"></div>
+  <div style="margin-top:1.5rem">
+    <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin-bottom:.6rem">TL Score — churn risk colour coding</div>
     <div id="guide-tl"></div>
-
-    <!-- Device tiers -->
-    <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin:1.2rem 0 .4rem">Device tier distribution</div>
-    <div id="guide-tiers"></div>
-
-    <!-- Churn alerts -->
-    <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin:1.2rem 0 .4rem">Churn risk alerts</div>
-    <div id="guide-churn"></div>
-
-    <!-- Inactive alerts -->
-    <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin:1.2rem 0 .4rem">Inactive alerts</div>
-    <div id="guide-inactive"></div>
-
-    <!-- Billing alerts -->
-    <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin:1.2rem 0 .4rem">Billing / upsell alerts</div>
-    <div id="guide-billing"></div>
-
-    <!-- Ops alerts -->
-    <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin:1.2rem 0 .4rem">Ops / data quality alerts</div>
-    <div id="guide-ops"></div>
   </div>
-
-  <!-- TAB 2: TRIAL MONITOR -->
-  <div id="guide-sec-trial" style="margin-bottom:2rem">
-    <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:#185FA5;border-radius:6px;padding:4px 12px;display:inline-block;margin-bottom:.8rem">Trial Monitor tab</div>
-    <div id="guide-trial"></div>
+  <div style="margin-top:1.5rem">
+    <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin-bottom:.6rem">Global exclusions (applied before all counts)</div>
+    <div id="guide-exclusions"></div>
   </div>
-
-  <!-- TAB 3: INSIGHTS -->
-  <div id="guide-sec-insights" style="margin-bottom:2rem">
-    <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:#1D9E75;border-radius:6px;padding:4px 12px;display:inline-block;margin-bottom:.8rem">Insights tab</div>
-    <div id="guide-insights"></div>
-  </div>
-
-  <!-- TAB 4: DATA CLEANSING -->
-  <div id="guide-sec-cleansing" style="margin-bottom:2rem">
-    <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:#6B4F9E;border-radius:6px;padding:4px 12px;display:inline-block;margin-bottom:.8rem">Data cleansing tab</div>
-    <div id="guide-cleansing"></div>
-  </div>
-
-  <!-- PENDING -->
-  <div style="margin-top:1rem">
+  <div style="margin-top:1.5rem">
     <div style="font-size:9px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#fff;background:#534AB7;border-radius:5px;padding:3px 10px;display:inline-block;margin-bottom:.6rem">Pending — activate next week</div>
     <div id="guide-pending"></div>
   </div>
-
-
 </div>
 
 </div>
@@ -763,7 +788,7 @@ async function saveSnaps(){return;} async function _saveSnaps_disabled(){
   if(!snapshots.length||!allData.length)return;
   const snap=snapshots[snapshots.length-1];
   const lean=allData.map(r=>({d:r.d,co:r.co,ct:r.ct,em:r.email,oem:r.oem,dev:r.dev,cmd:r.cmd,
-    cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.tr,td:r.trDays,lim:r.lim,lp:r.lowP,
+    cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.tr,td:r.trDays,di:r.daysIntoTrial,lim:r.lim,lp:r.lowP,
     f:r.f,tl:r.tl}));
   const raw=JSON.stringify(lean);
   // Compress using CompressionStream with chunked reading
@@ -1790,3 +1815,453 @@ function renderGuide(){
       <div><div style="font-size:11px;background:#EEEDFE;padding:3px 8px;border-radius:3px;color:#534AB7;font-family:monospace">last_activity within 180 days (replaces dev>0 AND cmd>0)</div><div class="guide-why" style="margin-top:3px">· Data now available — ready to activate</div></div>
     </div>\`;
 }
+/* ═══ INSIGHT SECTIONS ═══ (old trends - keep for compatibility) */
+/* ═══ PIE DRILLDOWN ═══ */
+let _pieDrillRows=[],_pieDrillTitle='',_pieDrillPage=0;
+let _tActivePieKey='';
+const PIE_PAGE=20;
+
+function showPieDrilldown(title, rows){
+  _pieDrillRows=[...rows].sort((a,b)=>b.dev-a.dev);
+  _pieDrillTitle=title;
+  _pieDrillPage=0;
+  renderPieDrilldown();
+  document.getElementById('pie-drilldown').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function renderPieDrilldown(){
+  const dd=document.getElementById('pie-drilldown');
+  const rows=_pieDrillRows;
+  if(!rows.length){dd.style.display='none';return;}
+  dd.style.display='block';
+  const start=_pieDrillPage*PIE_PAGE, end=start+PIE_PAGE;
+  const page=rows.slice(start,end);
+  const totalPages=Math.ceil(rows.length/PIE_PAGE);
+
+  dd.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:.5rem 1rem;background:#f8f7f3;border-bottom:1px solid #e5e2db">
+      <span style="font-size:12px;font-weight:600;color:#111">${_pieDrillTitle}
+        <span style="color:#aaa;font-weight:400;font-size:11px">${rows.length.toLocaleString()} accounts · sorted by devices</span>
+      </span>
+      <span style="cursor:pointer;color:#bbb;font-size:18px;line-height:1" onclick="document.getElementById('pie-drilldown').style.display='none'">×</span>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead><tr style="background:#f8f7f3">
+          <th style="padding:.38rem .75rem;text-align:left;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">#</th>
+          <th style="padding:.38rem .75rem;text-align:left;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">Domain</th>
+          <th style="padding:.38rem .75rem;text-align:left;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">Company</th>
+          <th style="padding:.38rem .75rem;text-align:left;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">OEM</th>
+          <th style="padding:.38rem .75rem;text-align:right;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">Devices</th>
+          <th style="padding:.38rem .75rem;text-align:right;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">Cmd/dev</th>
+          <th style="padding:.38rem .75rem;text-align:right;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">Days left</th>
+          <th style="padding:.38rem .75rem;text-align:left;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">Last activity</th>
+          <th style="padding:.38rem .75rem;text-align:left;color:#888;font-weight:500;border-bottom:1px solid #e5e2db">Trial ends</th>
+        </tr></thead>
+        <tbody>${page.map((r,i)=>`<tr style="background:${i%2?'#faf9f6':'#fff'}">
+          <td style="padding:.3rem .75rem;color:#ccc;font-size:10px">${start+i+1}</td>
+          <td style="padding:.3rem .75rem;color:#111;font-weight:500">${r.d}</td>
+          <td style="padding:.3rem .75rem;color:#555">${r.co||'—'}</td>
+          <td style="padding:.3rem .75rem;color:#888;font-size:10px">${r.oem}</td>
+          <td style="padding:.3rem .75rem;text-align:right;font-weight:700;color:#111">${r.dev.toLocaleString()}</td>
+          <td style="padding:.3rem .75rem;text-align:right;color:#555">${r.cpd??'—'}</td>
+          <td style="padding:.3rem .75rem;text-align:right;color:${r.daysLeft!=null&&r.daysLeft<30?'#c0392b':r.daysLeft!=null&&r.daysLeft<90?'#e67e22':'#555'}">${r.daysLeft!=null?r.daysLeft+'d':'—'}</td>
+          <td style="padding:.3rem .75rem;color:#888">${r.la||'—'}</td>
+          <td style="padding:.3rem .75rem;color:#888">${r.te||'—'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+    ${totalPages>1?`<div style="display:flex;align-items:center;justify-content:space-between;padding:.5rem 1rem;border-top:1px solid #f2f1ed;font-size:11px;color:#888">
+      <span>Page ${_pieDrillPage+1} of ${totalPages} · showing ${start+1}–${Math.min(end,rows.length)} of ${rows.length.toLocaleString()}</span>
+      <div style="display:flex;gap:6px">
+        ${_pieDrillPage>0?`<button onclick="_pieDrillPage--;renderPieDrilldown()" style="font-size:11px;padding:3px 10px;border:1px solid #ddd;border-radius:5px;background:#fff;cursor:pointer">← Prev</button>`:''}
+        ${end<rows.length?`<button onclick="_pieDrillPage++;renderPieDrilldown()" style="font-size:11px;padding:3px 10px;border:1px solid #ddd;border-radius:5px;background:#fff;cursor:pointer">Next →</button>`:''}
+      </div>
+    </div>`:''}`;
+}
+
+/* ═══ DASHBOARD OEM FILTER ═══ */
+const ALERT_NUM_IDS={
+  stale_large:'n-stale', declining:'n-declining', never_enrolled:'n-never-enrolled',
+  trial_expiring:'n-trial-expiring', enrolled_never:'n-never', low_cmd:'n-lowcmd',
+  all_lowpriv:'n-lowpriv', single_dev:'n-single', large_limited:'n-llim',
+  neg_cred:'n-negcred', expiry_90:'n-expiry90', expiry_30:'n-expiry30',
+  renewal_exp90:'n-renewal90', renewal_expired:'n-renewal-exp',
+  ghost:'n-ghost', orphaned:'n-orphaned', large_no_cp:'n-nocp'
+};
+
+function populateDashOemFilter(){
+  const sel=document.getElementById('dash-oem-filter');
+  if(!sel||sel.options.length>1)return;
+  const oemCount={};allData.forEach(r=>{oemCount[r.oem]=(oemCount[r.oem]||0)+1;});
+  const capO=o=>o?o[0].toUpperCase()+o.slice(1):o;
+  Object.entries(oemCount).filter(([,n])=>n>=50).sort((a,b)=>capO(a[0]).localeCompare(capO(b[0])))
+    .forEach(([o])=>{const opt=document.createElement('option');opt.value=o;opt.textContent=`${capO(o)} (${oemCount[o].toLocaleString()})`;sel.appendChild(opt);});
+}
+
+function filterDashAlerts(){
+  const oemFilter=document.getElementById('dash-oem-filter')?.value||'all';
+  const lookback=parseInt(document.getElementById('dash-lookback')?.value||'180');
+  const now=Date.now();
+  const baseData=oemFilter==='all'?allData:allData.filter(r=>r.oem===oemFilter);
+
+  // Dead filter: for accounts with la use daysSince, fallback to created date
+  const DEAD_FILTER=r=>{
+    if(r.la&&r.daysSince!==null) return r.daysSince<=lookback;
+    if(r.created){const ds=Math.floor((now-new Date(r.created))/86400000);return ds<=lookback;}
+    return lookback>=99999;
+  };
+  const fData=baseData.filter(DEAD_FILTER);
+
+  // Count all flags on alive accounts
+  const counts={};ALERTS.forEach(a=>counts[a.key]=0);
+  fData.forEach(r=>{if(r.f)r.f.forEach(f=>{if(counts[f]!==undefined)counts[f]++;});});
+
+  // stale_large: 51+ devices, within lookback window (alive), silent 30+ days
+  counts.stale_large=fData.filter(r=>r.dev>=51&&r.la&&r.daysSince!==null&&r.daysSince>30).length;
+  // Grey out stale_large card when window ≤ 30 days (mathematically impossible to have value)
+  const staleLargeCard=document.getElementById('card-stale-large');
+  if(staleLargeCard){staleLargeCard.style.opacity=lookback<=30?'0.35':'1';staleLargeCard.title=lookback<=30?'Cannot show: window too short (need >30 days to detect silence)':'';}
+
+
+  ALERTS.forEach(a=>{const el=document.getElementById(ALERT_NUM_IDS[a.key]);if(el)el.textContent=(counts[a.key]||0).toLocaleString();});
+  if(!window._hasCPData){const ncEl=document.getElementById('n-nocp');if(ncEl)ncEl.textContent='N/A';const ncCard=document.getElementById('card-nocp');if(ncCard)ncCard.style.opacity='0.45';}
+  const active=fData.filter(r=>r.dev>0&&r.cmd>0&&r.daysSince!==null);
+  const s90=active.length?Math.round(active.filter(r=>r.daysSince>90).length/active.length*100):0;
+  const s30=active.length?Math.round(active.filter(r=>r.daysSince<=30).length/active.length*100):0;
+  const ss=document.getElementById('silence-strip');
+  if(ss){
+    ss.style.display='';
+    const show90=lookback>90;
+    const s90stat=show90?`<div class="leg-sep"></div><span style="color:#c0392b"><strong>${s90}%</strong> silent 90+ days</span>`:'';
+    ss.innerHTML=`<span style="font-weight:500;color:#111">${fData.length.toLocaleString()} accounts in view</span><div class="leg-sep"></div><span>Active: <strong>${active.length.toLocaleString()}</strong></span>${s90stat}<div class="leg-sep"></div><span style="color:#1D9E75"><strong>${s30}%</strong> active last 30d</span>`;
+  }
+  applyFilters();
+}
+
+/* ═══ TEST TAB ═══ */
+function showTestDrilldown(title, rows, containerId){
+  containerId = containerId || 'pie-drilldown';
+  const dd=document.getElementById(containerId);
+  const sorted=[...rows].sort((a,b)=>b.dev-a.dev);
+  if(!sorted.length){dd.style.display='none';return;}
+  let page=0; const PG=20;
+  function render(){
+    dd.style.display='block';
+    const start=page*PG,end=start+PG,slice=sorted.slice(start,end),total=sorted.length,pages=Math.ceil(total/PG);
+    dd.innerHTML=`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:.5rem 1rem;background:#f8f7f3;border-bottom:1px solid #e5e2db">
+        <span style="font-size:12px;font-weight:600;color:#111">${title} <span style="color:#aaa;font-weight:400;font-size:11px">${total.toLocaleString()} accounts · sorted by devices</span></span>
+        <span style="cursor:pointer;color:#bbb;font-size:18px;line-height:1" onclick="document.getElementById('${containerId}').style.display='none'">×</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:#f8f7f3">
+            ${['#','Domain','Company','OEM','Devices','Cmd/dev','Days left','Last activity','Trial ends'].map(h=>`<th style="text-align:${['Devices','Cmd/dev','Days left'].includes(h)?'right':'left'};padding:.38rem .75rem;color:#888;font-weight:500;border-bottom:1px solid #e5e2db;position:sticky;top:0;background:#f8f7f3;white-space:nowrap">${h}</th>`).join('')}
+          </tr></thead>
+          <tbody>${slice.map((r,i)=>`<tr style="background:${i%2?'#faf9f6':'#fff'}">
+            <td style="padding:.3rem .75rem;color:#ccc;font-size:10px">${start+i+1}</td>
+            <td style="padding:.3rem .75rem;color:#111;font-weight:500">${r.d}</td>
+            <td style="padding:.3rem .75rem;color:#555">${r.co||'—'}</td>
+            <td style="padding:.3rem .75rem;color:#888;font-size:10px">${r.oem}</td>
+            <td style="padding:.3rem .75rem;text-align:right;font-weight:700;color:#111">${r.dev.toLocaleString()}</td>
+            <td style="padding:.3rem .75rem;text-align:right;color:#555">${r.cpd??'—'}</td>
+            <td style="padding:.3rem .75rem;text-align:right;color:${r.daysLeft!=null&&r.daysLeft<30?'#c0392b':r.daysLeft!=null&&r.daysLeft<90?'#e67e22':'#555'}">${r.daysLeft!=null?r.daysLeft+'d':'—'}</td>
+            <td style="padding:.3rem .75rem;color:#888;white-space:nowrap">${r.la||'—'}</td>
+            <td style="padding:.3rem .75rem;color:#888;white-space:nowrap">${r.te||'—'}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+      ${pages>1?`<div style="display:flex;align-items:center;justify-content:space-between;padding:.45rem 1rem;border-top:1px solid #f2f1ed;font-size:11px;color:#888">
+        <span>Showing ${start+1}–${Math.min(end,total)} of ${total.toLocaleString()}</span>
+        <div style="display:flex;gap:6px">
+          ${page>0?`<button onclick="page--;render();document.getElementById('${containerId}').scrollIntoView({behavior:'smooth',block:'nearest'})" style="font-size:11px;padding:3px 10px;border:1px solid #ddd;border-radius:5px;background:#fff;cursor:pointer">← Prev</button>`:''}
+          ${end<total?`<button onclick="page++;render();document.getElementById('${containerId}').scrollIntoView({behavior:'smooth',block:'nearest'})" style="font-size:11px;padding:3px 10px;border:1px solid #ddd;border-radius:5px;background:#fff;cursor:pointer">Next →</button>`:''}
+        </div>
+      </div>`:''}`;
+    dd.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+  render();
+}
+
+function buildTestTab(data, oemFilter){
+  if(!data.length||_buildTestTabLock) return;
+  _buildTestTabLock=true;
+  const DEAD_FILTER=r=>r.la&&r.daysSince!==null&&r.daysSince<=180;
+  const fData=(oemFilter==='all'?data:data.filter(r=>r.oem===oemFilter)).filter(DEAD_FILTER);
+  if(!fData.length){_buildTestTabLock=false;return;}
+  const total=fData.length;
+
+  // Populate OEM filter — build from allData directly
+  const sel=document.getElementById('oem-filter');
+  if(sel&&sel.options.length<=1){
+    const oemCount2={};data.forEach(r=>{oemCount2[r.oem]=(oemCount2[r.oem]||0)+1;});
+    const capO=o=>o?o[0].toUpperCase()+o.slice(1):o;
+    Object.entries(oemCount2).filter(([,n])=>n>=50).sort((a,b)=>capO(a[0]).localeCompare(capO(b[0])))
+      .forEach(([o])=>{const opt=document.createElement('option');opt.value=o;opt.textContent=`${capO(o)} (${oemCount2[o].toLocaleString()})`;sel.appendChild(opt);});
+  }
+
+  // ── Activation funnel ──
+  const enrolled=fData.filter(r=>r.dev>0).length;
+  const used=fData.filter(r=>r.cmd>0).length;
+  const active36=fData.filter(r=>r.daysSince!==null&&r.daysSince<=36).length;
+  const funnelEl=document.getElementById('ins-funnel');
+  if(funnelEl){
+    const steps=[
+      {l:'Total accounts',n:total,pct:100,c:'#888'},
+      {l:'Devices enrolled',n:enrolled,pct:Math.round(enrolled/total*100),c:'#378ADD'},
+      {l:'Used product',n:used,pct:Math.round(used/total*100),c:'#185FA5'},
+      {l:'Active last 36d',n:active36,pct:Math.round(active36/total*100),c:'#1D9E75',note:'Will improve once full last activity data is available'},
+    ];
+    funnelEl.innerHTML=steps.map(s=>`<div class="ins-bar-row"><div class="ins-bar-label">${s.l}${s.note?`<br><span style="font-size:9px;color:#aaa;font-style:italic">${s.note}</span>`:''}</div><div class="ins-bar-track"><div class="ins-bar-fill" style="width:${s.pct}%;background:${s.c}">${s.pct}%</div></div><div class="ins-bar-meta">${s.pct}% &nbsp;${s.n.toLocaleString()}</div></div>`).join('');
+  }
+
+  // ── Plan type split ──
+  const activeBase=fData.filter(r=>r.dev>0&&r.cmd>0);
+  const abTotal=activeBase.length;
+  const planSub=document.getElementById('ins-plan-sub');
+  if(planSub)planSub.textContent=`Based on ${abTotal.toLocaleString()} active accounts (devices > 0 and commands > 0) · filter will update when full last activity data is available`;
+  const planEl=document.getElementById('ins-plan');
+  if(planEl&&abTotal){
+    const plans=[
+      {l:'Limited plan',n:activeBase.filter(r=>r.lim).length,c:'#EF9F27'},
+      {l:'Full plan',n:activeBase.filter(r=>!r.lim&&!r.tr).length,c:'#1D9E75'},
+      {l:'Active trials',n:activeBase.filter(r=>r.tr).length,c:'#378ADD'},
+    ];
+    planEl.innerHTML=plans.map(p=>{const pct=Math.round(p.n/abTotal*100);return`<div class="ins-bar-row"><div class="ins-bar-label">${p.l}</div><div class="ins-bar-track"><div class="ins-bar-fill" style="width:${pct}%;background:${p.c}">${pct}%</div></div><div class="ins-bar-meta">${p.n.toLocaleString()} (${pct}%)</div></div>`;}).join('');
+  }
+
+  // ── Usage by account size ──
+  const sizeEl=document.getElementById('ins-size');
+  if(sizeEl){
+    const tiers=[
+      {l:'1–10 dev',fn:r=>r.dev>=1&&r.dev<=10},
+      {l:'11–50',fn:r=>r.dev>=11&&r.dev<=50},
+      {l:'51–200',fn:r=>r.dev>=51&&r.dev<=200},
+      {l:'201–500',fn:r=>r.dev>=201&&r.dev<=500},
+      {l:'500+ dev',fn:r=>r.dev>500},
+    ];
+    sizeEl.innerHTML=tiers.map(t=>{
+      const group=fData.filter(t.fn);
+      const total_g=group.length;
+      if(!total_g)return'';
+      const active_g=group.filter(r=>r.cmd>0).length;
+      const pct=Math.round(active_g/total_g*100);
+      const avgCmd=total_g?Math.round(group.reduce((s,r)=>s+r.cmd,0)/total_g):0;
+      return`<div class="ins-bar-row"><div class="ins-bar-label">${t.l}</div><div class="ins-bar-track"><div class="ins-bar-fill" style="width:${pct}%;background:#378ADD">${pct}%</div></div><div class="ins-bar-meta">${pct}% &nbsp;<span style="color:#bbb">${avgCmd} avg cmds &nbsp;${total_g.toLocaleString()} accts</span></div></div>`;
+    }).join('');
+  }
+
+  // ── Upsell ──
+  const upsellEl=document.getElementById('ins-upsell');
+  if(upsellEl){
+    const upsellTiers=[
+      {l:'1–10 dev',fn:r=>r.dev>=1&&r.dev<=10},
+      {l:'11–50',fn:r=>r.dev>=11&&r.dev<=50},
+      {l:'51–200',fn:r=>r.dev>=51&&r.dev<=200},
+      {l:'201–500',fn:r=>r.dev>=201&&r.dev<=500},
+      {l:'500+ dev',fn:r=>r.dev>500},
+    ];
+    upsellEl.innerHTML=upsellTiers.map(t=>{
+      const n=fData.filter(r=>r.lim&&r.cmd>0&&t.fn(r)).length;
+      return`<div class="upsell-card"><div class="upsell-tier">${t.l}</div><div class="upsell-num">${n.toLocaleString()}</div><div class="upsell-sub">limited + active</div></div>`;
+    }).join('');
+  }
+
+  // ── OEM Pie charts — always computed from live allData so every OEM works ──
+  const tGrid=document.getElementById('pie-grid');
+  if(!tGrid){_buildTestTabLock=false;return;}
+  if(!allData.length){tGrid.innerHTML='<div class="info-note">Load your first xlsx to see charts</div>';}
+  else{
+    // Build entries from live allData (not snapshot) so all OEMs are covered
+    const livePieFns=[
+      r=>true,
+      r=>r.dev===0,
+      r=>r.f.includes('single_dev'),
+      r=>r.cr!==null&&r.cr<0,
+    ];
+    const pieTitles=['Accounts by OEM','0-device accounts by OEM','1-device stalled accounts by OEM','Negative credits by OEM'];
+    const pieDrillFns=[
+      (oem)=>r=>r.oem===oem,
+      (oem)=>r=>r.oem===oem&&r.dev===0,
+      (oem)=>r=>r.oem===oem&&r.f.includes('single_dev'),
+      (oem)=>r=>r.oem===oem&&r.cr!==null&&r.cr<0,
+    ];
+
+    tGrid.innerHTML=pieTitles.map((title,pi)=>`<div class="pie-card"><div class="pie-card-title">${title} <span style="font-size:9px;color:#bbb;font-weight:400">· click slice</span></div><div class="pie-wrap"><canvas id="pie-${pi}" style="cursor:pointer"></canvas></div><div class="pie-legend" id="pie-leg-${pi}"></div></div>`).join('');
+
+    pieTitles.forEach((title,pi)=>{
+      // Count by OEM from live allData
+      const base=allData.filter(livePieFns[pi]);
+      const oemMap={};
+      base.forEach(r=>{oemMap[r.oem]=(oemMap[r.oem]||0)+1;});
+      let entries=Object.entries(oemMap).sort((a,b)=>b[1]-a[1]);
+      if(oemFilter!=='all')entries=entries.filter(([oem])=>oem===oemFilter);
+      else entries=entries.slice(0,10); // cap at 10 for readability
+      if(!entries.length){document.getElementById(`pie-leg-${pi}`).innerHTML='<div class="info-note">No data for selected OEM</div>';return;}
+      const labels=entries.map(([oem])=>oem);
+      const vals=entries.map(([,n])=>n);
+      const colors=PIE_COLORS.slice(0,labels.length);
+      const total_p=vals.reduce((s,v)=>s+v,0);
+      const cid=`pie-${pi}`;
+      if(chartInstances[cid])chartInstances[cid].destroy();
+      chartInstances[cid]=safeChart(cid,{
+        type:'doughnut',
+        data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:2,borderColor:'#fff'}]},
+        options:{
+          responsive:true,maintainAspectRatio:false,
+          onClick(evt,elements){
+            if(!elements.length)return;
+            const oem=labels[elements[0].index];
+            const dd=document.getElementById('pie-drilldown');
+            const key=`${pi}-${oem}`;
+            if(_tActivePieKey===key&&dd.style.display!=='none'){dd.style.display='none';_tActivePieKey='';return;}
+            _tActivePieKey=key;
+            showTestDrilldown(`${title} — ${oem}`,allData.filter(pieDrillFns[pi](oem)),'pie-drilldown');
+          },
+          plugins:{
+            legend:{display:false},
+            tooltip:{callbacks:{label:c=>`${c.label}: ${c.parsed.toLocaleString()} (${total_p>0?Math.round(c.parsed/total_p*100):0}%)`}},
+            datalabels:{display:false}
+          },
+          layout:{padding:10}
+        },
+        plugins:[{
+          id:`pieLabels${pi}`,
+          afterDraw(chart){
+            const {ctx}=chart;
+            chart.data.datasets.forEach((dataset,di)=>{
+              chart.getDatasetMeta(di).data.forEach((arc,i)=>{
+                const val=dataset.data[i];
+                const pct=total_p>0?Math.round(val/total_p*100):0;
+                if(pct<5)return;
+                const label=labels.length===1?val.toLocaleString():pct+'%';
+                const mid=(arc.startAngle+arc.endAngle)/2;
+                const r=arc.outerRadius*0.65;
+                const x=arc.x+Math.cos(mid)*r;
+                const y=arc.y+Math.sin(mid)*r;
+                ctx.save();ctx.fillStyle='#fff';ctx.font='bold 11px -apple-system,sans-serif';
+                ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,x,y);ctx.restore();
+              });
+            });
+          }
+        }]
+      });
+      document.getElementById(`pie-leg-${pi}`).innerHTML=labels.slice(0,6).map((l,i)=>`<div class="pie-leg-row"><div class="pie-leg-dot" style="background:${colors[i]}"></div>${l}<span style="margin-left:auto;color:#aaa;font-size:10px">${vals[i].toLocaleString()} (${total_p>0?Math.round(vals[i]/total_p*100):0}%)</span></div>`).join('');
+    });
+  }
+
+  // ── Trend lines (reuse same snapshots, date filters from t-date-from/to) ──
+  const tBlock=document.getElementById('trend-charts-block');
+  if(!tBlock){_buildTestTabLock=false;return;}
+  const fromVal=document.getElementById('date-from')?.value;
+  const toVal=document.getElementById('date-to')?.value;
+  // Populate date dropdowns if empty
+  const tFrom=document.getElementById('date-from');
+  const tTo=document.getElementById('date-to');
+  if(tFrom&&!tFrom.dataset.populated&&snapshots.length){
+    tFrom.dataset.populated='1';tTo.dataset.populated='1';
+    snapshots.forEach(s=>{
+      const o1=document.createElement('option');o1.value=s.date;o1.textContent=s.date;tFrom.appendChild(o1);
+      const o2=document.createElement('option');o2.value=s.date;o2.textContent=s.date;tTo.appendChild(o2);
+    });
+  }
+  let tSnaps=snapshots;
+  if(fromVal)tSnaps=tSnaps.filter(s=>s.date>=fromVal);
+  if(toVal)tSnaps=tSnaps.filter(s=>s.date<=toVal);
+  // Show bar chart for 1 file, line chart for 2+
+  if(tSnaps.length<1){tBlock.innerHTML='<div class="info-note">Load a weekly file to see charts</div>';}
+  else{
+    const singleSnap=tSnaps.length===1;
+    const dates=tSnaps.map(s=>s.date);
+    const cats=['churn','inactive','billing','ops'];
+    const catLabels={churn:'Churn risk',inactive:'Inactive',billing:'Billing / upsell',ops:'Ops / data'};
+    const catClass={churn:'cat-churn',inactive:'cat-inactive',billing:'cat-billing',ops:'cat-ops'};
+    tBlock.innerHTML=cats.map(cat=>{
+      const alerts=ALERTS.filter(a=>a.cat===cat);
+      return`<div class="cat-section"><div class="cat-label ${catClass[cat]}">${catLabels[cat]}</div><div class="charts-grid">${alerts.map(a=>`<div class="chart-card"><div class="chart-title">${a.label}</div><div class="chart-num" id="tn-${a.key}">—</div><div class="chart-delta" id="td-${a.key}">${singleSnap?'<span style="font-size:9px;color:#bbb">load 2nd file for trend</span>':''}</div><div class="chart-wrap"><canvas id="tc-${a.key}"></canvas></div></div>`).join('')}</div></div>`;
+    }).join('');
+    cats.forEach(cat=>{
+      ALERTS.filter(a=>a.cat===cat).forEach((a,ai)=>{
+        const vals=tSnaps.map(s=>s.counts[a.key]||0);
+        const latest=vals[vals.length-1],prev=vals.length>1?vals[vals.length-2]:null;
+        const tnEl=document.getElementById(`tn-${a.key}`);if(tnEl)tnEl.textContent=latest.toLocaleString();
+        if(prev!==null){const diff=latest-prev,pct=prev>0?((diff/prev)*100).toFixed(1):'100';const el=document.getElementById(`td-${a.key}`);if(el){if(diff>0){el.className='chart-delta delta-up';el.textContent=`▲ ${Math.abs(diff).toLocaleString()} (+${pct}%)`;}else if(diff<0){el.className='chart-delta delta-down';el.textContent=`▼ ${Math.abs(diff).toLocaleString()} (${pct}%)`;}else{el.className='chart-delta delta-flat';el.textContent='No change';}}}
+        const cid=`tc-${a.key}`;
+        const color=(CAT_COLORS[cat]||['#aaa'])[ai%(CAT_COLORS[cat]||['#aaa']).length];
+        if(singleSnap){
+          chartInstances[cid]=safeChart(cid,{type:'bar',data:{labels:[dates[0]],datasets:[{data:vals,backgroundColor:color+'99',borderColor:color,borderWidth:1.5,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y.toLocaleString()} accounts`}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#aaa'}},y:{grid:{color:'#f2f1ed'},ticks:{font:{size:9},color:'#aaa'},beginAtZero:true}}}});
+        } else {
+          chartInstances[cid]=safeChart(cid,{type:'line',data:{labels:dates,datasets:[{data:vals,borderColor:color,backgroundColor:color+'22',borderWidth:2,pointBackgroundColor:color,pointRadius:3,fill:true,tension:.3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y.toLocaleString()} accounts`}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#aaa',maxRotation:45}},y:{grid:{color:'#f2f1ed'},ticks:{font:{size:9},color:'#aaa'},beginAtZero:false}}}});
+        }
+      });
+    });
+  }
+
+  // ── Snapshots table ──
+  const _stb=document.getElementById('snap-tbl-body');if(_stb)_stb.innerHTML=snapshots.map((s,i)=>`<tr><td>${s.date}</td><td>${s.filename}</td><td>${s.total.toLocaleString()}</td><td>${(s.counts.stale_large||0).toLocaleString()}</td><td>${(s.counts.declining||0).toLocaleString()}</td><td>${(s.counts.renewal_expired||0).toLocaleString()}</td><td>${(s.counts.expiry_30||0).toLocaleString()}</td><td><span class="snap-del" onclick="deleteSnap(${i})">×</span></td></tr>`).join('');
+  _buildTestTabLock=false;
+}
+
+/* ═══ INIT ═══ */
+(async function(){
+  await loadSnaps();
+  renderSnapsBar();
+  if(snapshots.length){const b=document.getElementById('snap-badge');b.textContent=snapshots.length;b.style.display='';populateTrendFilters();}
+  // If account data was restored, render the full dashboard
+  if(allData.length>0){
+    filtered=[...allData];
+    const snap=snapshots[snapshots.length-1];
+    // Update header
+    const ps=document.getElementById('page-sub');
+    if(ps&&snap)ps.textContent=`${allData.length.toLocaleString()} accounts · ${snap.filename} · ${snap.date}`;
+    // Show dashboard sections
+    document.getElementById('main-dashboard').style.display='block';
+    const te=document.getElementById('trial-empty');if(te)te.style.display='none';
+    const tc=document.getElementById('trial-content');if(tc)tc.style.display='block';
+    const sb=document.getElementById('snap-badge');if(sb){sb.textContent=snapshots.length;sb.style.display='';}
+    // Populate trialData from restored allData
+    trialData=allData.filter(r=>r.tr&&r.trDays!=null&&r.trDays>0);
+    console.log('DEBUG trialData:',trialData.length,'sample tr:',allData.find(r=>r.tr)?.tr,'sample trDays:',allData.find(r=>r.tr)?.trDays);
+    // Reset state
+    activeFilter=null;sortKey='dev';sortDir=-1;page=0;
+    document.querySelectorAll('[data-filter]').forEach(c=>c.classList.remove('active'));
+    document.querySelectorAll('.insight-panel').forEach(p=>p.classList.remove('visible'));
+    // Show drop zone loaded state
+    const dz=document.getElementById('drop-zone');
+    if(dz&&snap){
+      dz.innerHTML=`<div style="display:flex;align-items:center;gap:12px;padding:.5rem .75rem;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:#0F6E56;font-weight:500">✓ ${snap.filename} (${snap.date}) — ${allData.length.toLocaleString()} accounts</span>
+        <button id="load-btn" style="font-size:11px;font-weight:600;padding:5px 14px;border-radius:6px;border:1.5px solid #0F6E56;background:#fff;color:#0F6E56;cursor:pointer;white-space:nowrap">⬆ Load new file</button>
+        <span style="font-size:10px;color:#aaa">or drag &amp; drop</span>
+      </div><input type="file" id="file-input" accept=".xlsx,.xls,.csv" onchange="handleFile(this.files[0])" style="display:none">`;
+      document.getElementById('load-btn').addEventListener('click',e=>{e.stopPropagation();document.getElementById('file-input').click();});
+      _dragDepth=0;const _dz2=document.getElementById('drop-zone');if(_dz2)attachDrag(_dz2);
+    }
+    // Render all panels
+    populateTrendFilters();renderSnapsBar();applyFilters();renderTrialTable();
+    const _tsel=document.getElementById('oem-filter');
+    const _tf=document.getElementById('date-from');
+    const _tt=document.getElementById('date-to');
+    const _tselOC=_tsel?.onchange;const _tfOC=_tf?.onchange;const _ttOC=_tt?.onchange;
+    if(_tsel)_tsel.onchange=null;if(_tf)_tf.onchange=null;if(_tt)_tt.onchange=null;
+    if(_tsel){_tsel.value='all';_tsel.options.length=1;_tsel.dataset.populated='';}
+    if(_tf){_tf.options.length=1;_tf.dataset.populated='';}
+    if(_tt){_tt.options.length=1;_tt.dataset.populated='';}
+    if(_tsel)_tsel.onchange=_tselOC;if(_tf)_tf.onchange=_tfOC;if(_tt)_tt.onchange=_ttOC;
+    buildTestTab(allData,'all');
+    populateDashOemFilter();
+    const _dashSel=document.getElementById('dash-oem-filter');if(_dashSel)_dashSel.value='all';
+    const _dashLb=document.getElementById('dash-lookback');if(_dashLb)_dashLb.value='180';
+    filterDashAlerts();
+    const _ss=document.getElementById('silence-strip');if(_ss)_ss.style.display='';
+    const vs=document.getElementById('viewer-status');
+    if(vs)vs.textContent=snapshots.length+' snapshot'+(snapshots.length>1?'s':'')+' loaded · last: '+snapshots[snapshots.length-1]?.date;
+  } else {
+    const vs=document.getElementById('viewer-status');
+    if(vs)vs.textContent='No data yet — admin will upload soon';
+  }
+})();
+</script>
+</body>
+</html>
