@@ -351,14 +351,14 @@ select.filter-sel{font-size:12px;padding:4px 10px;border:1px solid #ddd;border-r
           <div class="acard c-r" id="card-stale-large" data-filter="stale_large" data-panel="panel-stale">
             <div class="card-num" id="n-stale">—</div><div class="card-label">Large accounts — gone silent</div><div class="card-sub">51+ devices · no activity</div>
           </div>
-          <div class="acard c-r" data-filter="declining" data-panel="panel-declining">
-            <div class="card-num" id="n-declining">—</div><div class="card-label">Small accounts — gone dark</div><div class="card-sub">≤50 devices · proven user · silent 30+ days</div>
+          <div class="acard c-r" data-filter="trial_expiring" data-panel="panel-trial-expiring">
+            <div class="card-num" id="n-trial-expiring">—</div><div class="card-label">Trial — ending soon</div><div class="card-sub">Active trial · &lt;7 days left · no commands</div>
           </div>
           <div class="acard c-r" data-filter="never_enrolled" data-panel="panel-never-enrolled">
             <div class="card-num" id="n-never-enrolled">—</div><div class="card-label">Signed up — never started</div><div class="card-sub">0 devices · has contact info</div>
           </div>
-          <div class="acard c-r" data-filter="trial_expiring" data-panel="panel-trial-expiring">
-            <div class="card-num" id="n-trial-expiring">—</div><div class="card-label">Trial — ending soon</div><div class="card-sub">Active trial · &lt;30 days left</div>
+          <div class="acard c-r" data-filter="declining" data-panel="panel-declining">
+            <div class="card-num" id="n-declining">—</div><div class="card-label">Small accounts — gone dark</div><div class="card-sub">≤50 devices · proven user · silent 30+ days</div>
           </div>
         </div>
       </div>
@@ -385,17 +385,17 @@ select.filter-sel{font-size:12px;padding:4px 10px;border:1px solid #ddd;border-r
       <div class="alert-row">
         <div class="row-pill pill-billing">Billing<br>upsell</div>
         <div class="cards-row">
-          <div class="acard c-b" data-filter="large_limited">
-            <div class="card-num" id="n-llim">—</div><div class="card-label">Upsell opportunity</div><div class="card-sub">51+ devices · on limited plan</div>
-          </div>
           <div class="acard c-b" data-filter="neg_cred">
             <div class="card-num" id="n-negcred">—</div><div class="card-label">Negative credits</div><div class="card-sub">Billing anomaly</div>
+          </div>
+          <div class="acard c-b" data-filter="expiry_30">
+            <div class="card-num" id="n-expiry30">—</div><div class="card-label">Credits expiring — 30d</div><div class="card-sub">Credits budget ending within 30 days</div>
           </div>
           <div class="acard c-b" data-filter="expiry_90" data-panel="panel-expiry">
             <div class="card-num" id="n-expiry90">—</div><div class="card-label">Credits expiring — 90d</div><div class="card-sub">Credits budget ending within 90 days</div>
           </div>
-          <div class="acard c-b" data-filter="expiry_30">
-            <div class="card-num" id="n-expiry30">—</div><div class="card-label">Credits expiring — 30d</div><div class="card-sub">Credits budget ending within 30 days</div>
+          <div class="acard c-b" data-filter="large_limited">
+            <div class="card-num" id="n-llim">—</div><div class="card-label">Upsell opportunity</div><div class="card-sub">51+ devices · on limited plan</div>
           </div>
         </div>
       </div>
@@ -403,13 +403,13 @@ select.filter-sel{font-size:12px;padding:4px 10px;border:1px solid #ddd;border-r
       <div class="alert-row">
         <div class="row-pill pill-billing" style="visibility:hidden"></div>
         <div class="cards-row">
-          <div class="acard c-b" data-filter="renewal_exp90">
-            <div class="new-badge">NEW</div>
-            <div class="card-num" id="n-renewal90">—</div><div class="card-label">Agreement expiring — 90d</div><div class="card-sub">Agreement ending soon</div>
-          </div>
           <div class="acard c-b" data-filter="renewal_expired">
             <div class="new-badge">NEW</div>
             <div class="card-num" id="n-renewal-exp">—</div><div class="card-label">Agreement expired</div><div class="card-sub">Agreement has lapsed</div>
+          </div>
+          <div class="acard c-b" data-filter="renewal_exp90">
+            <div class="new-badge">NEW</div>
+            <div class="card-num" id="n-renewal90">—</div><div class="card-label">Agreement expiring — 90d</div><div class="card-sub">Agreement ending soon</div>
           </div>
           <div class="acard placeholder"><div style="font-size:10px;color:#ccc;text-align:center">More signals<br>coming soon</div></div>
           <div class="acard placeholder"><div style="font-size:10px;color:#ccc;text-align:center">More signals<br>coming soon</div></div>
@@ -534,9 +534,9 @@ select.filter-sel{font-size:12px;padding:4px 10px;border:1px solid #ddd;border-r
   <div id="trial-content" style="display:none">
     <!-- Summary cards -->
     <div class="trial-summary">
-      <div class="ts-card red"   style="cursor:pointer" onclick="setTrialTL('red')"   title="Filter to High churn only"><div class="ts-num" id="tm-red">—</div><div class="ts-label">High churn risk</div></div>
-      <div class="ts-card amber" style="cursor:pointer" onclick="setTrialTL('amber')" title="Filter to Mid churn only"><div class="ts-num" id="tm-amber">—</div><div class="ts-label">Mid churn risk</div></div>
-      <div class="ts-card green" style="cursor:pointer" onclick="setTrialTL('green')" title="Filter to Low churn only"><div class="ts-num" id="tm-green">—</div><div class="ts-label">Low churn risk</div></div>
+      <div class="ts-card red"   style="cursor:pointer" onclick="setTrialTL('red')"   title="Filter to High churn only"><div class="ts-num" id="tm-red">—</div><div class="ts-label">High churn risk</div><div class="ts-sub" style="font-size:10px;color:#A32D2D;margin-top:2px">≤7 days left AND no commands</div></div>
+      <div class="ts-card amber" style="cursor:pointer" onclick="setTrialTL('amber')" title="Filter to Mid churn only"><div class="ts-num" id="tm-amber">—</div><div class="ts-label">Mid churn risk</div><div class="ts-sub" style="font-size:10px;color:#854F0B;margin-top:2px">8–21 days · no devices or inactive >7d</div></div>
+      <div class="ts-card green" style="cursor:pointer" onclick="setTrialTL('green')" title="Filter to Low churn only"><div class="ts-num" id="tm-green">—</div><div class="ts-label">Low churn risk</div><div class="ts-sub" style="font-size:10px;color:#085041;margin-top:2px">All others</div></div>
       <div class="ts-card" style="cursor:pointer" onclick="setTrialTL('all')" title="Show all"><div class="ts-num" id="tm-total">—</div><div class="ts-label">Total active trials</div></div>
       <div class="ts-card" style="cursor:pointer" onclick="setTrialNoDev()" title="Filter to 0 devices enrolled"><div class="ts-num" id="tm-nodev">—</div><div class="ts-label">0 devices enrolled</div></div>
     </div>
@@ -895,24 +895,15 @@ function setText(id,val){const el=document.getElementById(id);if(el)el.textConte
 
 /* ═══ TRAFFIC LIGHT ═══ */
 function tlScore(dev,cmd,cpd,daysSince,allLP,trDays,trialActive){
-  if(dev===0){
-    // Trial phase, 0 devices
-    if(trialActive&&trDays!==null){
-      if(trDays<=15) return 'red';
-      if(trDays<=27) return 'amber';
-      return 'green';
-    }
-    return 'grey';
-  }
-  if(allLP||(cmd===0&&dev>0)) return 'red';
-  const large=dev>500,medium=dev>100&&dev<=500;
-  // Trial phase with devices
+  // Trial scoring: days left + device activity
   if(trialActive&&trDays!==null){
-    if(trDays<=15&&(daysSince===null||daysSince>5)) return 'red';
-    if(daysSince!==null&&daysSince<=5) return 'green'; // recently active = green
-    if(trDays<=27) return 'amber';
+    if(trDays<=7&&cmd===0) return 'red';
+    if(trDays<=21&&(dev===0||daysSince===null||daysSince>7)) return 'amber';
     return 'green';
   }
+  if(dev===0) return 'grey';
+  if(allLP||(cmd===0&&dev>0)) return 'red';
+  const large=dev>500,medium=dev>100&&dev<=500;
   // Post-trial
   if(large){if(daysSince!==null&&daysSince>=14)return 'red';if(daysSince!==null&&daysSince<=3&&cpd>=5)return 'green';}
   else if(medium){if(daysSince!==null&&daysSince>=30)return 'red';if(daysSince!==null&&daysSince<=7&&cpd>=3)return 'green';}
@@ -972,7 +963,7 @@ function processData(raw,filename,dateStr){
     if(dev>=51&&la&&daysSince!==null&&daysSince>30)                  flags.push('stale_large');
     if(dev>0&&dev<=50&&cmd>0&&daysSince!==null&&daysSince>=DECLINE_DAYS) flags.push('declining');
     if(dev===0&&hasContact)                                          flags.push('never_enrolled');
-    if(trialActive&&trDays<=30)                                      flags.push('trial_expiring');
+    if(trialActive&&trDays<=7&&cmd===0)                              flags.push('trial_expiring');
     if(dev>0&&cmd===0)                                               flags.push('enrolled_never');
     if(dev>0&&cmd>0&&la&&cpd<LOW_CMD)                               flags.push('low_cmd');
     if(allLP)                                                        flags.push('all_lowpriv');
@@ -1602,7 +1593,7 @@ const GUIDE_ALERTS = [
   {cat:'churn', name:'Large accounts — gone silent',  condition:'dev ≥51 · has last activity · active within window · silent >30d', threshold:'51+ dev · silent 30+ days', why:'· High-value accounts that were active but stopped<br>· Count grows as window extends<br>· Priority churn conversations'},
   {cat:'churn', name:'Small accounts — gone dark',    condition:'dev >0 · cmd >0 · silent >30d',                                          threshold:'30 days silent',            why:'· Was active, now gone dark<br>· Still has devices — recoverable'},
   {cat:'churn', name:'Signed up — never started',    condition:'dev =0 · has email OR company OR activity',                                 threshold:'0 devices, reachable',      why:'· Signed up but never set up<br>· CS has a contact to reach'},
-  {cat:'churn', name:'Trial — ending soon',          condition:'trial=TRUE · 0 < days left ≤30',                                       threshold:'30 days remaining',         why:'· &lt;3d critical · &lt;15d high · &lt;30d mid risk<br>· See Trial Monitor for full detail'},
+  {cat:'churn', name:'Trial — ending soon',          condition:'trial=TRUE · 0 < days left ≤30',                                       threshold:'7 days remaining',          why:'· Active trial expiring within 7 days<br>· See Trial Monitor for full breakdown'},
   {cat:'inactive', name:'Accounts w. devices — no usage', condition:'dev >0 · cmd =0',                                                     threshold:'0 commands ever',           why:'· Devices enrolled, product never touched<br>· Strongest inactivity signal'},
   {cat:'inactive', name:'Low usage',                           condition:'dev >0 · cmd >0 · has activity · cmd/dev <2',                   threshold:'<2 cmd/device',             why:'· Below median usage for active base<br>· Worth a check-in call'},
   {cat:'inactive', name:'Limited accounts',                    condition:'low-priv devices = total devices',                                        threshold:'100% low-priv',             why:'· All devices lack system permissions<br>· Core features blocked — one CS call fixes'},
@@ -1647,9 +1638,9 @@ function renderGuide(){
     <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;overflow:hidden;font-size:11px;margin-bottom:6px">
       <div style="padding:.55rem 1rem;background:#f8f7f3;border-bottom:1px solid #e5e2db;color:#555;line-height:1.6">Coloured dot on every row and in Trial Monitor. <strong>Trial</strong> and <strong>existing customers</strong> scored differently. <strong style="color:#c0392b">~66% score Red</strong> — prioritise by device count.</div>
       <div style="padding:.55rem 1rem;font-weight:600;color:#111;font-size:11px;background:#f8f7f3;border-bottom:1px solid #e5e2db">Trial accounts (active trial)</div>
-      <div style="display:grid;grid-template-columns:180px 1fr;border-bottom:0.5px solid #f2f1ed"><div style="padding:.6rem 1rem;background:#E24B4A18;border-right:0.5px solid #e5e2db;display:flex;align-items:flex-start;gap:7px"><div style="width:10px;height:10px;border-radius:50%;background:#E24B4A;flex-shrink:0;margin-top:2px"></div><span style="font-weight:600;color:#E24B4A">High churn risk</span></div><div style="padding:.6rem 1rem;color:#555"><div>· 0 devices AND trial ≤15 days left</div><div>· Has devices but 0 commands ever</div><div>· All devices low-priv</div><div>· Trial ≤15 days left AND no activity in last 5 days</div></div></div>
-      <div style="display:grid;grid-template-columns:180px 1fr;border-bottom:0.5px solid #f2f1ed"><div style="padding:.6rem 1rem;background:#EF9F2718;border-right:0.5px solid #e5e2db;display:flex;align-items:flex-start;gap:7px"><div style="width:10px;height:10px;border-radius:50%;background:#EF9F27;flex-shrink:0;margin-top:2px"></div><span style="font-weight:600;color:#EF9F27">Mid churn risk</span></div><div style="padding:.6rem 1rem;color:#555"><div>· Trial ≤27 days left AND no activity in last 5 days</div><div>· Anything not meeting Red or Green criteria</div></div></div>
-      <div style="display:grid;grid-template-columns:180px 1fr;border-bottom:1px solid #e5e2db"><div style="padding:.6rem 1rem;background:#1D9E7518;border-right:0.5px solid #e5e2db;display:flex;align-items:flex-start;gap:7px"><div style="width:10px;height:10px;border-radius:50%;background:#1D9E75;flex-shrink:0;margin-top:2px"></div><span style="font-weight:600;color:#1D9E75">Low churn risk</span></div><div style="padding:.6rem 1rem;color:#555"><div>· Active in last 5 days (regardless of days left)</div><div>· Trial has 27+ days remaining</div></div></div>
+      <div style="display:grid;grid-template-columns:180px 1fr;border-bottom:0.5px solid #f2f1ed"><div style="padding:.6rem 1rem;background:#E24B4A18;border-right:0.5px solid #e5e2db;display:flex;align-items:flex-start;gap:7px"><div style="width:10px;height:10px;border-radius:50%;background:#E24B4A;flex-shrink:0;margin-top:2px"></div><span style="font-weight:600;color:#E24B4A">High churn risk</span></div><div style="padding:.6rem 1rem;color:#555"><div>· Trial ≤7 days left AND no commands ever</div></div></div>
+      <div style="display:grid;grid-template-columns:180px 1fr;border-bottom:0.5px solid #f2f1ed"><div style="padding:.6rem 1rem;background:#EF9F2718;border-right:0.5px solid #e5e2db;display:flex;align-items:flex-start;gap:7px"><div style="width:10px;height:10px;border-radius:50%;background:#EF9F27;flex-shrink:0;margin-top:2px"></div><span style="font-weight:600;color:#EF9F27">Mid churn risk</span></div><div style="padding:.6rem 1rem;color:#555"><div>· 8–21 days left AND no devices enrolled</div><div>· 8–21 days left AND inactive > 7 days</div></div></div>
+      <div style="display:grid;grid-template-columns:180px 1fr;border-bottom:1px solid #e5e2db"><div style="padding:.6rem 1rem;background:#1D9E7518;border-right:0.5px solid #e5e2db;display:flex;align-items:flex-start;gap:7px"><div style="width:10px;height:10px;border-radius:50%;background:#1D9E75;flex-shrink:0;margin-top:2px"></div><span style="font-weight:600;color:#1D9E75">Low churn risk</span></div><div style="padding:.6rem 1rem;color:#555"><div>· Everything else</div></div></div>
       <div style="padding:.55rem 1rem;font-weight:600;color:#111;font-size:11px;background:#f8f7f3;border-bottom:1px solid #e5e2db;border-top:1px solid #e5e2db">Existing customers (post-trial)</div>
       <div style="display:grid;grid-template-columns:180px 1fr 1fr 1fr;border-bottom:0.5px solid #f2f1ed"><div style="padding:.5rem 1rem;background:#f8f7f3;border-right:0.5px solid #e5e2db"></div><div style="padding:.5rem 1rem;font-weight:500;color:#888;font-size:10px;border-right:0.5px solid #e5e2db;text-align:center">Small (1–100 dev)</div><div style="padding:.5rem 1rem;font-weight:500;color:#888;font-size:10px;border-right:0.5px solid #e5e2db;text-align:center">Medium (101–500 dev)</div><div style="padding:.5rem 1rem;font-weight:500;color:#888;font-size:10px;text-align:center">Large (500+ dev)</div></div>
       <div style="display:grid;grid-template-columns:180px 1fr 1fr 1fr;border-bottom:0.5px solid #f2f1ed"><div style="padding:.6rem 1rem;background:#E24B4A18;border-right:0.5px solid #e5e2db;display:flex;align-items:center;gap:7px"><div style="width:10px;height:10px;border-radius:50%;background:#E24B4A;flex-shrink:0"></div><span style="font-weight:600;color:#E24B4A">High</span></div><div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Silent ≥90d · 0 commands · all low-priv</div><div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Silent ≥30d · 0 commands · all low-priv</div><div style="padding:.6rem 1rem;color:#555;font-size:10px">Silent ≥14d · 0 commands · all low-priv</div></div>
@@ -1665,7 +1656,7 @@ function renderGuide(){
   const trialEl=document.getElementById('guide-trial');
   if(trialEl) trialEl.innerHTML=[
     {name:'Who appears',     condition:'trial=TRUE · days left >0',            threshold:'Active trials only',   why:'· Expired / non-trial accounts excluded'},
-    {name:'Summary cards',   condition:'TL score applied to trial accounts only', threshold:'Same TL as dashboard', why:'· 0 devices = red if ≤15 days left'},
+    {name:'Summary cards',   condition:'TL score applied to trial accounts only', threshold:'Same TL as dashboard', why:'· Red: ≤7 days left AND no commands<br>· Mid: 8–21 days, no devices or inactive >7d<br>· Low: all others'},
     {name:'Days into trial', condition:'today − trial start date',            threshold:'Calculated',           why:'· Time since trial began'},
     {name:'Days left',       condition:'trial days left from CSV',                threshold:'Direct from data',     why:'· Red ≤3d · amber ≤15d'},
     {name:'0 devices card',  condition:'trial active · dev =0',                threshold:'0 devices',            why:'· Never enrolled a device<br>· Highest urgency — needs onboarding call'},
@@ -1807,6 +1798,8 @@ function filterDashAlerts(){
 
   // stale_large: 51+ devices, within lookback window (alive), silent 30+ days
   counts.stale_large=fData.filter(r=>r.dev>=51&&r.la&&r.daysSince!==null&&r.daysSince>30).length;
+  // trial_expiring: no dead filter — match Trial Monitor count
+  counts.trial_expiring=baseData.filter(r=>r.f&&r.f.includes('trial_expiring')).length;
   // Grey out stale_large card when window ≤ 30 days (mathematically impossible to have value)
   const staleLargeCard=document.getElementById('card-stale-large');
   if(staleLargeCard){staleLargeCard.style.opacity=lookback<=30?'0.35':'1';staleLargeCard.title=lookback<=30?'Cannot show: window too short (need >30 days to detect silence)':'';}
