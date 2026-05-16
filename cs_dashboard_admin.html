@@ -250,12 +250,11 @@ select.filter-sel{font-size:12px;padding:4px 10px;border:1px solid #ddd;border-r
 
 /* Alert guide tab */
 .guide-cat-header{display:inline-block;font-size:9px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#fff;border-radius:5px;padding:3px 10px;margin:1rem 0 .5rem}
-.guide-row{display:grid;grid-template-columns:160px 1fr;gap:0;align-items:stretch;border-radius:8px;border:0.5px solid #e5e2db;background:#fff;font-size:11px;margin-bottom:6px;overflow:hidden}
-.guide-name{font-weight:600;color:#111;line-height:1.5;font-size:11px;padding:.65rem .9rem;background:#f8f7f3;border-right:0.5px solid #e5e2db}
-.guide-name-sub{font-weight:400;color:#888;font-size:10px;margin-top:2px}
-.guide-condition{font-size:10.5px;background:#f2f1ed;padding:2px 7px;border-radius:3px;color:#444;font-family:monospace;line-height:1.6;white-space:normal;word-break:break-word;display:inline-block}
-.guide-why{margin-top:5px;color:#555;font-size:11px;line-height:1.75}
-.guide-threshold{font-size:10px;background:#FAEEDA;color:#854F0B;border-radius:6px;padding:2px 7px;font-weight:600;display:inline-block;margin-top:5px}
+.guide-row{display:grid;grid-template-columns:150px 1fr 210px;gap:10px;align-items:start;padding:.6rem .85rem;border-radius:8px;border:0.5px solid #e5e2db;background:#fff;font-size:12px;margin-bottom:4px}
+.guide-name{font-weight:500;color:#111;line-height:1.5;font-size:12px}
+.guide-condition{font-size:12px;background:#f2f1ed;padding:3px 8px;border-radius:3px;color:#333;font-family:monospace;line-height:1.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.guide-why{margin-top:3px;color:#aaa;font-size:11px}
+.guide-threshold{font-size:11px;background:#FAEEDA;color:#854F0B;border-radius:8px;padding:3px 8px;font-weight:500;display:inline-block;text-align:right;line-height:1.5}
 
 /* Data cleansing tab */
 .dc-section{margin-bottom:1.5rem}
@@ -678,71 +677,6 @@ if(sessionStorage.getItem('cs_auth')==='1'){
 </div>
 
 <!-- ═══ ALERT GUIDE TAB ═══ -->
-<div class="tab-content" id="tab-insights">
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:.65rem 1rem;background:#fff;border:1px solid #e5e2db;border-radius:10px;margin-bottom:1rem">
-    <span style="font-size:11px;font-weight:500;color:#555">Filter by OEM:</span>
-    <select id="oem-filter" onchange="buildTestTab(allData,this.value)"><option value="all">All OEMs</option></select>
-    <span style="font-size:11px;color:#aaa;margin-left:auto">Updates when you load a new xlsx</span>
-  </div>
-
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:1rem">
-    <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem">
-      <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.6rem;display:flex;align-items:baseline">Activation funnel <span style="font-size:10px;color:#aaa;font-style:italic;font-weight:400;margin-left:auto">% of total accounts</span></div>
-      <div id="ins-funnel"></div>
-    </div>
-    <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem">
-      <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.6rem;display:flex;align-items:baseline">Plan type split <span style="font-size:10px;color:#aaa;font-style:italic;font-weight:400;margin-left:auto">active accounts only</span></div>
-      <div style="font-size:10px;color:#aaa;margin-bottom:.4rem" id="ins-plan-sub"></div>
-      <div id="ins-plan"></div>
-    </div>
-    <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem">
-      <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.6rem;display:flex;align-items:baseline">Usage by account size <span style="font-size:10px;color:#aaa;font-style:italic;font-weight:400;margin-left:auto">% with commands</span></div>
-      <div id="ins-size"></div>
-    </div>
-  </div>
-
-  <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem;margin-bottom:1rem">
-    <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.4rem;display:flex;align-items:baseline">Limited plan but active — upsell targets <span style="font-size:10px;color:#aaa;font-style:italic;font-weight:400;margin-left:auto">by account size · filtered by OEM selector above</span></div>
-    <div class="upsell-grid" id="ins-upsell"></div>
-    <div style="font-size:10px;color:#aaa;margin-top:.5rem">On a limited plan but genuinely using the product — warmest upsell leads for CS and account management.</div>
-  </div>
-
-  <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem;margin-bottom:1rem">
-    <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.65rem">OEM breakdown <span style="font-size:10px;color:#aaa;font-weight:400;font-style:italic;margin-left:8px">from latest upload</span></div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;overflow:hidden" id="pie-grid"><div class="info-note">Load your xlsx to see charts</div></div>
-    <div id="pie-drilldown" style="display:none;margin-top:10px;background:#fff;border:1px solid #e5e2db;border-radius:10px;overflow:hidden"></div>
-  </div>
-
-  <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1rem;margin-bottom:1rem">
-    <div style="font-size:13px;font-weight:500;color:#111;margin-bottom:.65rem">Weekly trend lines <span style="font-size:10px;color:#aaa;font-weight:400;font-style:italic;margin-left:8px">load 2+ weekly files to compare</span></div>
-    <div style="display:flex;gap:10px;align-items:center;margin-bottom:.75rem;flex-wrap:wrap">
-      <span style="font-size:11px;color:#555">Date range:</span>
-      <select id="date-from" onchange="buildTestTab(allData,document.getElementById('oem-filter').value)"><option value="">From — all</option></select>
-      <span style="font-size:12px;color:#aaa">to</span>
-      <select id="date-to" onchange="buildTestTab(allData,document.getElementById('oem-filter').value)"><option value="">To — all</option></select>
-      <button class="btn" onclick="document.getElementById('date-from').value='';document.getElementById('date-to').value='';buildTestTab(allData,document.getElementById('oem-filter').value)" style="margin-left:auto">Reset</button>
-    </div>
-    <div id="trend-charts-block" style="overflow:hidden"><div class="info-note">Load 2 or more weekly files to see trend lines</div></div>
-    <div style="margin-top:1.5rem">
-      <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin-bottom:.5rem">Loaded snapshots</div>
-      <div class="tbl-wrap"><table class="snap-tbl">
-        <thead><tr><th>Date</th><th>Filename</th><th>Accounts</th><th>Stale large</th><th>Declining</th><th>Renewals expired</th><th>Expiring 30d</th><th></th></tr></thead>
-        <tbody id="snap-tbl-body"></tbody>
-      </table></div>
-    </div>
-  </div>
-  <div id="ins-drilldown" style="display:none;background:#fff;border:1px solid #e5e2db;border-radius:10px;overflow:hidden;margin-top:10px"></div>
-</div>
-
-<!-- ═══ DATA CLEANSING TAB ═══ -->
-<div class="tab-content" id="tab-cleansing">
-  <div style="background:#fff8f0;border:1px solid #fde8c8;border-radius:10px;padding:.75rem 1rem;margin-bottom:1rem;font-size:11px;color:#666;line-height:1.65">
-    These accounts have data quality or reachability issues. They are <strong>excluded from all Dashboard alert counts</strong> and should be passed to the <strong>data/ops team</strong>, not CS.
-  </div>
-  <div id="dc-content"><div class="info-note">Load your xlsx to see data cleansing analysis</div></div>
-</div>
-
-<!-- ═══ ALERT GUIDE TAB ═══ -->
 <div class="tab-content" id="tab-guide">
   <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;padding:.85rem 1.1rem;margin-bottom:1rem;font-size:11px;color:#666;line-height:1.65">
     Each alert below shows its exact conditions and current threshold. These can be adjusted — contact the dashboard owner to change a threshold.
@@ -803,7 +737,7 @@ async function loadSnaps(){
           // Reconstruct allData rows
           allData=lean.map(r=>({d:r.d||'',co:r.co||'',ct:r.ct||'',email:r.em||'',oem:r.oem||'undefined',
             dev:r.dev||0,cmd:r.cmd||0,cr:r.cr!=null?r.cr:null,daysSince:r.ds!=null?r.ds:null,
-            daysCreated:r.dc!=null?r.dc:null,la:r.la||'',tr:r.tr||false,trDays:r.td!=null?r.td:null,daysIntoTrial:r.di!=null?r.di:null,
+            daysCreated:r.dc!=null?r.dc:null,la:r.la||'',tr:r.tr||false,trDays:r.td!=null?r.td:null,
             lim:r.lim||false,lowP:r.lp||0,f:r.f||[],tl:r.tl||'amber',
             cpd:r.dev>0?Math.round(r.cmd/r.dev*10)/10:0,
             created:r.la||''}));
@@ -818,7 +752,7 @@ async function saveSnaps(){
   if(!snapshots.length||!allData.length)return;
   const snap=snapshots[snapshots.length-1];
   const lean=allData.map(r=>({d:r.d,co:r.co,ct:r.ct,em:r.email,oem:r.oem,dev:r.dev,cmd:r.cmd,
-    cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.tr,td:r.trDays,di:r.daysIntoTrial,lim:r.lim,lp:r.lowP,
+    cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.tr,td:r.trDays,lim:r.lim,lp:r.lowP,
     f:r.f,tl:r.tl}));
   const raw=JSON.stringify(lean);
   // Compress using CompressionStream with chunked reading
@@ -1667,24 +1601,21 @@ function renderCleansing(){
 
 /* ═══ ALERT GUIDE TAB ═══ */
 const GUIDE_ALERTS = [
-  {cat:'churn', name:'Large accounts — gone silent',    condition:'dev ≥51 · has last activity · active within window · silent >30d', threshold:'51+ dev · silent 30+ days', why:'· High-value accounts that were active but stopped<br>· Count grows as window extends<br>· Priority churn conversations'},
-  {cat:'churn', name:'Small accounts — gone dark',       condition:'dev >0 · cmd >0 · silent >30d',                                          threshold:'30 days silent',            why:'· Was active, now gone dark<br>· Still has devices — recoverable'},
-  {cat:'churn', name:'Signed up — never started',           condition:'dev =0 · has email OR company OR activity',                                 threshold:'0 devices, reachable',      why:'· Signed up but never set up<br>· CS has a contact to reach'},
-  {cat:'churn', name:'Trial — ending soon',  condition:'trial=TRUE · 0 < days left ≤30',                                            threshold:'30 days remaining',         why:'· &lt;3d critical · &lt;15d high · &lt;30d mid risk<br>· See Trial Monitor for full detail'},
-  {cat:'inactive', name:'Accounts w. devices — no usage',           condition:'dev >0 · cmd =0',                                                           threshold:'0 commands ever',      why:'· Devices enrolled, product never touched<br>· Strongest inactivity signal'},
-  {cat:'inactive', name:'Low usage',        condition:'dev >0 · cmd >0 · has activity · cmd/dev <2',                         threshold:'<2 cmd/device',        why:'· Below median usage for active base<br>· Worth a check-in call'},
-  {cat:'inactive', name:'Limited accounts', condition:'low-priv devices = total devices',                                             threshold:'100% low-priv',        why:'· All devices lack system permissions<br>· Core features blocked — one CS call fixes'},
-  {cat:'inactive', name:'Stalled after trial',            condition:'dev =1 · trial ended 0–90d ago · inactive ≥90d',                      threshold:'1 dev · ended ≤90d · silent ≥90d', why:'· Single-device pilot that never grew<br>· >90d since trial end = excluded'},
-  {cat:'billing', name:'Upsell opportunity',          condition:'dev ≥51 · limited=TRUE',                              threshold:'51+ dev, limited plan',  why:'· Large account on a capped plan<br>· Clear upgrade conversation'},
-  {cat:'billing', name:'Negative credits',            condition:'credits <0',                                                threshold:'Any negative value',     why:'· Billing anomaly — should not happen<br>· Investigate immediately'},
-  {cat:'billing', name:'Credits expiring — 90d',  condition:'credits ÷ dev ≤90  (or days_left ≤90)',                threshold:'<90 days left',          why:'· Budget ending within 90 days<br>· Falls back to credits ÷ devices if days_left empty'},
-  {cat:'billing', name:'Credits expiring — 30d',  condition:'credits ÷ dev ≤30  (or days_left ≤30)',                threshold:'<30 days left',          why:'· Urgent — very little runway<br>· Act immediately'},
-  {cat:'billing', name:'Agreement expiring — 90d',  condition:'smart_expire_date within next 90 days',                  threshold:'Smart expire <90d',      why:'· Licence renewing soon<br>· Start outreach now'},
-  {cat:'billing', name:'Agreement expired',     condition:'smart_expire_date <today · within last 90 days',        threshold:'Lapsed ≤90 days ago',     why:'· Licence lapsed<br>· Contact immediately to recover'},
-  {cat:'ops', name:'No contact info',                condition:'dev =0 · no email · no company · no activity',    threshold:'All 4 fields empty',    why:'· No real user behind them<br>· OEM shells or system-generated'},
-  {cat:'ops', name:'Orphaned accounts',             condition:'no email · no company · no activity',                threshold:'3 contact fields empty', why:'· Cannot be contacted by CS<br>· Broader than ghost — includes accounts with devices'},
-  {cat:'ops', name:'Missing channel partner',  condition:'dev ≥51 · channel partner empty · CP data in file', threshold:'51+ devices',          why:'· No revenue attribution on a large account<br>· Only shown when CSV has CP column'},
-]
+  {cat:'churn', name:'Silent large accounts',   condition:'devices >= 51  AND  last activity date is populated  AND  last activity is within the selected window  AND  last activity > 30 days ago', threshold:'51+ devices · silent 30+ days · active within window', why:'Large accounts (51+ devices) that have a last activity date, were active within your selected time window, but have gone quiet in the last 30+ days. Example at 6 months: accounts last active between 30 days and 6 months ago. The count grows as you extend the window because more accounts fall into the "was active but went quiet" range. These are your highest-value churn conversations — large deployments that were genuinely using the product and then stopped.'},
+  {cat:'churn', name:'Declining activity',        condition:'devices > 0 AND commands > 0 AND last activity > 30 days ago',         threshold:'30 days silent',           why:'Was active, now gone dark. Still recoverable.'},
+  {cat:'churn', name:'Never enrolled',            condition:'devices = 0 AND has email OR company OR activity date',                threshold:'0 devices, reachable',     why:'Signed up but never set up the product. CS has a contact.'},
+  {cat:'churn', name:'Trial expiring <30 days',   condition:'trial = TRUE AND 0 < trial days left <= 30',                          threshold:'30 days remaining',        why:'<3d = critical, <15d = high, <30d = mid churn risk.'},
+  {cat:'inactive', name:'Enrolled, never used',   condition:'devices > 0 AND commands = 0',                                        threshold:'0 commands ever',          why:'Product deployed, never touched. Purest inactivity signal.'},
+  {cat:'inactive', name:'Active but low commands',condition:'devices > 0 AND commands > 0 AND has activity AND cmd/device < 2',    threshold:'< 2 cmd/device (your median)', why:'Below this = bottom 50% of your active base.'},
+  {cat:'inactive', name:'All devices have limited permissions',   condition:'is device low priv = num devices (every device lacks system permissions)', threshold:'100% of devices low-priv', why:'Product installed but core features blocked. One CS call fixes this.'},
+  {cat:'inactive', name:'Single-device accounts', condition:'devices = 1 AND trial ended 0-90d ago AND inactive 90+ days',         threshold:'1 device · trial ended ≤90d · inactive ≥90d', why:'Stalled pilot after trial. Beyond 90 days excluded as unrecoverable.'},
+  {cat:'billing',  name:'Large account on limited plan', condition:'devices >= 51 AND limited = TRUE',                             threshold:'51+ devices, limited plan', why:'Large account on a capped plan. Clear upsell conversation.'},
+  {cat:'billing',  name:'Negative credits',        condition:'credits < 0',                                                         threshold:'Any negative value',       why:'Billing anomaly — should not happen. Investigate immediately.'},
+  {cat:'billing',  name:'Credits expiring · 90 days', condition:'credits ÷ devices <= 90 days  (or days_left <= 90)',              threshold:'< 90 days of credits left', why:'Credits budget ending within 90 days. Formula: credits ÷ devices where days_left is empty.'},
+  {cat:'billing',  name:'Renewal — expire <90 days', condition:'smart_expire_date between today and +90 days',                     threshold:'Smart expire date <90 days', why:'Smart licence expiring soon — account needs renewal outreach.'},
+  {cat:'billing',  name:'Credits expiring · 30 days', condition:'credits ÷ devices <= 30 days  (or days_left <= 30)',              threshold:'< 30 days of credits left', why:'Urgent — act now. Very little runway left.'},
+  {cat:'billing',  name:'Renewal — already expired', condition:'smart_expire_date < today AND within last 90 days',                threshold:'Lapsed within 90 days',    why:'Smart licence lapsed. Contact immediately to recover.'},
+];
 
 const GUIDE_CAT = {
   churn:   {label:'Churn risk',    bg:'#A32D2D'},
@@ -1693,146 +1624,133 @@ const GUIDE_CAT = {
 };
 
 function renderGuide(){
-  function row(a){
-    return`<div class="guide-row">
-      <div class="guide-name">${a.name}<div class="guide-name-sub">${a.threshold}</div></div>
-      <div style="padding:.65rem .9rem"><div class="guide-condition">${a.condition}</div><div class="guide-why">${a.why}</div></div>
-    </div>`;
-  }
-
-  // ── DASHBOARD: alert categories ──
-  ['churn','inactive','billing','ops'].forEach(cat=>{
-    const el=document.getElementById('guide-'+cat);
-    if(el) el.innerHTML=GUIDE_ALERTS.filter(a=>a.cat===cat).map(row).join('');
+  ['churn','inactive','billing'].forEach(cat=>{
+    const el = document.getElementById('guide-'+cat);
+    if(!el) return;
+    const alerts = GUIDE_ALERTS.filter(a=>a.cat===cat);
+    const {label, bg} = GUIDE_CAT[cat];
+    el.innerHTML = `<div class="guide-cat-header" style="background:${bg}">${label.toUpperCase()}</div>` +
+      alerts.map(a=>`<div class="guide-row">
+        <div class="guide-name">${a.name}</div>
+        <div><div class="guide-condition" title="${a.condition}">${a.condition}</div><div class="guide-why">${a.why}</div></div>
+        <div style="text-align:right"><span class="guide-threshold">Threshold: ${a.threshold}</span></div>
+      </div>`).join('');
   });
 
-  // ── DASHBOARD: device tiers ──
-  const tierEl=document.getElementById('guide-tiers');
-  if(tierEl) tierEl.innerHTML=[
-    {name:'≤ 1 device',  condition:'devices = 0 or 1', threshold:'tier 0', why:'· New signup or evaluation'},
-    {name:'2 – 10 dev',  condition:'devices 2 – 10',   threshold:'tier 1', why:'· Small / SMB / pilot'},
-    {name:'11 – 50 dev', condition:'devices 11 – 50',  threshold:'tier 2', why:'· Mid-size · watch for growth'},
-    {name:'51 – 100 dev',condition:'devices 51 – 100', threshold:'tier 3', why:'· Large · silent 30d = churn call'},
-    {name:'100+ dev',    condition:'devices > 100',    threshold:'tier 4', why:'· Enterprise · any decline = act'},
-  ].map(row).join('');
-
-  // ── DASHBOARD: TL score ──
-  const tlEl=document.getElementById('guide-tl');
-  if(tlEl) tlEl.innerHTML=`
-    <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;overflow:hidden;font-size:11px;margin-bottom:6px">
-      <div style="padding:.55rem 1rem;background:#f8f7f3;border-bottom:1px solid #e5e2db;color:#555;line-height:1.6">
-        Coloured dot on every row and in Trial Monitor. <strong>Trial</strong> and <strong>existing customers</strong> scored differently. <strong style="color:#c0392b">~66% score Red</strong> — prioritise by device count.
-      </div>
-      <div style="padding:.55rem 1rem;font-weight:600;color:#111;font-size:11px;background:#f8f7f3;border-bottom:1px solid #e5e2db">Trial accounts (active trial)</div>
-      <div style="display:grid;grid-template-columns:180px 1fr;border-bottom:0.5px solid #f2f1ed">
-        <div style="padding:.6rem 1rem;background:#E24B4A18;border-right:0.5px solid #e5e2db;display:flex;align-items:flex-start;gap:7px"><div style="width:10px;height:10px;border-radius:50%;background:#E24B4A;flex-shrink:0;margin-top:2px"></div><span style="font-weight:600;color:#E24B4A">High churn risk</span></div>
-        <div style="padding:.6rem 1rem;color:#555">
-          <div>· 0 devices AND trial ≤ 15 days left</div>
-          <div>· Has devices but 0 commands ever</div>
-          <div>· All devices low-priv</div>
-          <div>· Trial ≤ 15 days left AND no activity in last 5 days</div>
+  const tlEl = document.getElementById('guide-tl');
+  if(tlEl){
+    tlEl.innerHTML=`
+      <div style="background:#fff;border:0.5px solid #e5e2db;border-radius:10px;overflow:hidden;font-size:11px;margin-bottom:6px">
+        <div style="padding:.55rem 1rem;background:#f8f7f3;border-bottom:1px solid #e5e2db;color:#555;line-height:1.6">
+          The TL score appears as a coloured dot on every account row and in the Trial Monitor.
+          Scoring logic differs between <strong>trial accounts</strong> and <strong>existing customers</strong>.
+          <strong style="color:#c0392b">Note:</strong> 66% of active accounts typically score Red — prioritise by device count.
         </div>
-      </div>
-      <div style="display:grid;grid-template-columns:180px 1fr;border-bottom:0.5px solid #f2f1ed">
-        <div style="padding:.6rem 1rem;background:#EF9F2718;border-right:0.5px solid #e5e2db;display:flex;align-items:flex-start;gap:7px"><div style="width:10px;height:10px;border-radius:50%;background:#EF9F27;flex-shrink:0;margin-top:2px"></div><span style="font-weight:600;color:#EF9F27">Mid churn risk</span></div>
-        <div style="padding:.6rem 1rem;color:#555">
-          <div>· Trial ≤ 27 days left AND no activity in last 5 days</div>
-          <div>· Anything not meeting Red or Green criteria</div>
+
+        <!-- Trial customers -->
+        <div style="padding:.55rem 1rem;font-weight:600;color:#111;font-size:11px;background:#f8f7f3;border-bottom:1px solid #e5e2db">
+          Trial accounts (active trial)
         </div>
-      </div>
-      <div style="display:grid;grid-template-columns:180px 1fr;border-bottom:1px solid #e5e2db">
-        <div style="padding:.6rem 1rem;background:#1D9E7518;border-right:0.5px solid #e5e2db;display:flex;align-items:flex-start;gap:7px"><div style="width:10px;height:10px;border-radius:50%;background:#1D9E75;flex-shrink:0;margin-top:2px"></div><span style="font-weight:600;color:#1D9E75">Low churn risk</span></div>
-        <div style="padding:.6rem 1rem;color:#555">
-          <div>· Active in last 5 days (regardless of days left)</div>
-          <div>· Trial has 27+ days remaining</div>
+        <div style="display:grid;grid-template-columns:180px 1fr;border-bottom:0.5px solid #f2f1ed">
+          <div style="padding:.6rem 1rem;background:#E24B4A18;border-right:0.5px solid #e5e2db;display:flex;align-items:flex-start;gap:7px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#E24B4A;flex-shrink:0;margin-top:2px"></div>
+            <span style="font-weight:600;color:#E24B4A">High churn risk</span>
+          </div>
+          <div style="padding:.6rem 1rem;color:#555">
+            <div style="margin-bottom:3px">· 0 devices enrolled AND trial ends ≤ 15 days</div>
+            <div style="margin-bottom:3px">· Has devices BUT zero commands ever run</div>
+            <div style="margin-bottom:3px">· All devices have limited permissions (low-priv)</div>
+            <div>· Trial ending soon (≤ 15 days) with no recent activity (nothing in last 5 days)</div>
+          </div>
         </div>
-      </div>
-      <div style="padding:.55rem 1rem;font-weight:600;color:#111;font-size:11px;background:#f8f7f3;border-bottom:1px solid #e5e2db;border-top:1px solid #e5e2db">Existing customers (post-trial)</div>
-      <div style="display:grid;grid-template-columns:180px 1fr 1fr 1fr;border-bottom:0.5px solid #f2f1ed">
-        <div style="padding:.5rem 1rem;background:#f8f7f3;border-right:0.5px solid #e5e2db"></div>
-        <div style="padding:.5rem 1rem;font-weight:500;color:#888;font-size:10px;border-right:0.5px solid #e5e2db;text-align:center">Small (1–100 dev)</div>
-        <div style="padding:.5rem 1rem;font-weight:500;color:#888;font-size:10px;border-right:0.5px solid #e5e2db;text-align:center">Medium (101–500 dev)</div>
-        <div style="padding:.5rem 1rem;font-weight:500;color:#888;font-size:10px;text-align:center">Large (500+ dev)</div>
-      </div>
-      <div style="display:grid;grid-template-columns:180px 1fr 1fr 1fr;border-bottom:0.5px solid #f2f1ed">
-        <div style="padding:.6rem 1rem;background:#E24B4A18;border-right:0.5px solid #e5e2db;display:flex;align-items:center;gap:7px"><div style="width:10px;height:10px;border-radius:50%;background:#E24B4A;flex-shrink:0"></div><span style="font-weight:600;color:#E24B4A">High</span></div>
-        <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Silent ≥ 90 days · or 0 commands · or all low-priv</div>
-        <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Silent ≥ 30 days · or 0 commands · or all low-priv</div>
-        <div style="padding:.6rem 1rem;color:#555;font-size:10px">Silent ≥ 14 days · or 0 commands · or all low-priv</div>
-      </div>
-      <div style="display:grid;grid-template-columns:180px 1fr 1fr 1fr;border-bottom:0.5px solid #f2f1ed">
-        <div style="padding:.6rem 1rem;background:#EF9F2718;border-right:0.5px solid #e5e2db;display:flex;align-items:center;gap:7px"><div style="width:10px;height:10px;border-radius:50%;background:#EF9F27;flex-shrink:0"></div><span style="font-weight:600;color:#EF9F27">Mid</span></div>
-        <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Active but cmd/dev &lt; 2</div>
-        <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Active but cmd/dev &lt; 3</div>
-        <div style="padding:.6rem 1rem;color:#555;font-size:10px">Active but cmd/dev &lt; 5</div>
-      </div>
-      <div style="display:grid;grid-template-columns:180px 1fr 1fr 1fr">
-        <div style="padding:.6rem 1rem;background:#1D9E7518;border-right:0.5px solid #e5e2db;display:flex;align-items:center;gap:7px"><div style="width:10px;height:10px;border-radius:50%;background:#1D9E75;flex-shrink:0"></div><span style="font-weight:600;color:#1D9E75">Low</span></div>
-        <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Active ≤ 14 days ago AND cmd/dev ≥ 2</div>
-        <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Active ≤ 7 days ago AND cmd/dev ≥ 3</div>
-        <div style="padding:.6rem 1rem;color:#555;font-size:10px">Active ≤ 3 days ago AND cmd/dev ≥ 5</div>
-      </div>
-    </div>`;
+        <div style="display:grid;grid-template-columns:180px 1fr;border-bottom:0.5px solid #f2f1ed">
+          <div style="padding:.6rem 1rem;background:#EF9F2718;border-right:0.5px solid #e5e2db;display:flex;align-items:flex-start;gap:7px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#EF9F27;flex-shrink:0;margin-top:2px"></div>
+            <span style="font-weight:600;color:#EF9F27">Mid churn risk</span>
+          </div>
+          <div style="padding:.6rem 1rem;color:#555">
+            <div style="margin-bottom:3px">· Trial ends ≤ 27 days AND not recently active (nothing in last 5 days)</div>
+            <div>· Any trial not meeting Red or Green criteria</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:180px 1fr;border-bottom:1px solid #e5e2db">
+          <div style="padding:.6rem 1rem;background:#1D9E7518;border-right:0.5px solid #e5e2db;display:flex;align-items:flex-start;gap:7px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#1D9E75;flex-shrink:0;margin-top:2px"></div>
+            <span style="font-weight:600;color:#1D9E75">Low churn risk</span>
+          </div>
+          <div style="padding:.6rem 1rem;color:#555">
+            <div style="margin-bottom:3px">· Active in the last 5 days (regardless of days remaining)</div>
+            <div>· Trial has 27+ days remaining</div>
+          </div>
+        </div>
 
-  // ── DASHBOARD: global exclusions ──
-  const excEl=document.getElementById('guide-exclusions');
-  if(excEl) excEl.innerHTML=[
-    {name:'Last activity filter',  condition:'"Last activity" dropdown · default 6 months · no activity = uses creation date', threshold:'Default: 6 months', why:'· Controls all alert counts<br>· Silent large = active between 30d and selected window'},
-    {name:'Ghana accounts',        condition:'country = "Ghana"',                                                               threshold:'Always excluded',   why:'· Excluded from all counts, alerts, and rows'},
-    {name:'Dead accounts baseline',condition:'last activity exists · daysSince ≤180',                                       threshold:'180 days',          why:'· Applies to all alerts except ghost / orphaned'},
-  ].map(a=>`<div class="guide-row">
-    <div class="guide-name">${a.name}<div class="guide-name-sub">${a.threshold}</div></div>
-    <div style="padding:.65rem .9rem"><div class="guide-condition">${a.condition}</div><div class="guide-why">${a.why}</div></div>
-  </div>`).join('');
+        <!-- Existing customers -->
+        <div style="padding:.55rem 1rem;font-weight:600;color:#111;font-size:11px;background:#f8f7f3;border-bottom:1px solid #e5e2db;border-top:1px solid #e5e2db">
+          Existing customers (post-trial)
+        </div>
+        <div style="display:grid;grid-template-columns:180px 1fr 1fr 1fr;border-bottom:0.5px solid #f2f1ed">
+          <div style="padding:.5rem 1rem;background:#f8f7f3;border-right:0.5px solid #e5e2db"></div>
+          <div style="padding:.5rem 1rem;font-weight:500;color:#888;font-size:10px;border-right:0.5px solid #e5e2db;text-align:center">Small (1–100 dev)</div>
+          <div style="padding:.5rem 1rem;font-weight:500;color:#888;font-size:10px;border-right:0.5px solid #e5e2db;text-align:center">Medium (101–500 dev)</div>
+          <div style="padding:.5rem 1rem;font-weight:500;color:#888;font-size:10px;text-align:center">Large (500+ dev)</div>
+        </div>
+        <div style="display:grid;grid-template-columns:180px 1fr 1fr 1fr;border-bottom:0.5px solid #f2f1ed">
+          <div style="padding:.6rem 1rem;background:#E24B4A18;border-right:0.5px solid #e5e2db;display:flex;align-items:center;gap:7px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#E24B4A;flex-shrink:0"></div>
+            <span style="font-weight:600;color:#E24B4A">High</span>
+          </div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Silent ≥ 90 days · or 0 commands · or all low-priv</div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Silent ≥ 30 days · or 0 commands · or all low-priv</div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px">Silent ≥ 14 days · or 0 commands · or all low-priv</div>
+        </div>
+        <div style="display:grid;grid-template-columns:180px 1fr 1fr 1fr;border-bottom:0.5px solid #f2f1ed">
+          <div style="padding:.6rem 1rem;background:#EF9F2718;border-right:0.5px solid #e5e2db;display:flex;align-items:center;gap:7px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#EF9F27;flex-shrink:0"></div>
+            <span style="font-weight:600;color:#EF9F27">Mid</span>
+          </div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Active but cmd/dev &lt; 2</div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Active but cmd/dev &lt; 3</div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px">Active but cmd/dev &lt; 5</div>
+        </div>
+        <div style="display:grid;grid-template-columns:180px 1fr 1fr 1fr">
+          <div style="padding:.6rem 1rem;background:#1D9E7518;border-right:0.5px solid #e5e2db;display:flex;align-items:center;gap:7px">
+            <div style="width:10px;height:10px;border-radius:50%;background:#1D9E75;flex-shrink:0"></div>
+            <span style="font-weight:600;color:#1D9E75">Low</span>
+          </div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Active ≤ 14 days ago AND cmd/dev ≥ 2</div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px;border-right:0.5px solid #e5e2db">Active ≤ 7 days ago AND cmd/dev ≥ 3</div>
+          <div style="padding:.6rem 1rem;color:#555;font-size:10px">Active ≤ 3 days ago AND cmd/dev ≥ 5</div>
+        </div>
+      </div>`;
+  }
 
-  // ── TRIAL MONITOR ──
-  const trialEl=document.getElementById('guide-trial');
-  if(trialEl) trialEl.innerHTML=[
-    {name:'Who appears',          condition:'trial=TRUE · days left >0',                   threshold:'Active trials only',      why:'· Expired / non-trial accounts excluded'},
-    {name:'Summary cards',        condition:'TL score applied to trial accounts only',      threshold:'Same TL as dashboard',    why:'· 0 devices enrolled = red if ≤15 days left'},
-    {name:'Days into trial',      condition:'today − trial start date',                     threshold:'Calculated',              why:'· Time since trial began'},
-    {name:'Days left',            condition:'trial days left from CSV',                     threshold:'Direct from data',        why:'· Red ≤3d · amber ≤15d'},
-    {name:'0 devices card',       condition:'trial active · dev =0',                        threshold:'0 devices',               why:'· Never enrolled a device<br>· Highest urgency — needs onboarding call'},
-    {name:'TL filter',            condition:'All / High / Mid / Low churn',                 threshold:'All by default',          why:'· Filters table to selected risk band'},
-    {name:'OEM filter',           condition:'OEMs with ≥5 trial accounts',                  threshold:'5+ accounts',             why:'· Smaller OEMs hidden to keep dropdown clean'},
-  ].map(row).join('');
+  const excEl = document.getElementById('guide-exclusions');
+  if(excEl){
+    const excls = [
+      {name:'Last activity filter (dashboard control)', condition:'Accounts with last activity older than the selected window are excluded. Accounts with no last activity use creation date as fallback.', why:'<strong>Controls all 11 alert counts.</strong> Set via the "Last activity" dropdown (default 6 months). Accounts active within the window are counted. <strong>Silent large accounts</strong> specifically counts 51+ device accounts that are within the window but have gone quiet for 30+ days — last active between 30 days and your selected window. All other alerts count accounts active within the window that meet their own condition.'},
+      {name:'Ghana accounts', condition:'country = "Ghana"', why:'Excluded from all counts, alerts, and table rows.'},
+      {name:'OEM shell accounts (default domains)', condition:'domain contains "default"', why:'OEM placeholder accounts with no real end-user behind them.'},
+      {name:'Inactive OEM accounts', condition:'OEM = undefined AND (last activity null OR > 180 days)', why:'~10,152 accounts. No OEM attribution + completely inactive.'},
+    ];
+    excEl.innerHTML = excls.map(e=>`<div style="display:grid;grid-template-columns:140px 1fr;gap:10px;align-items:start;padding:.55rem .85rem;border-radius:8px;border:0.5px solid #e5e2db;background:#f8f7f3;font-size:11px;margin-bottom:4px">
+      <div style="font-weight:500;color:#111">${e.name}</div>
+      <div><div class="guide-condition">${e.condition}</div><div class="guide-why">${e.why}</div></div>
+    </div>`).join('');
+  }
 
-  // ── INSIGHTS ──
-  const insEl=document.getElementById('guide-insights');
-  if(insEl) insEl.innerHTML=[
-    {name:'Activation funnel',    condition:'Total → dev>0 → cmd>0 → active last 36d',      threshold:'4 steps',                why:'· Drop-off at each stage<br>· Active 36d will improve once full last_activity available'},
-    {name:'Plan type split',      condition:'Active base: dev>0 · cmd>0 → limited / full / trial', threshold:'Active accounts only',  why:'· Limited vs Full vs Active Trial split<br>· Will upgrade to last_activity ≤180d filter'},
-    {name:'Usage by size',        condition:'cmd/dev ratio across tiers: 1–10 / 11–50 / 51–200 / 201–500 / 500+', threshold:'Active accounts', why:'· Which account sizes get most value per device'},
-    {name:'OEM filter',           condition:'OEMs with ≥50 accounts',                         threshold:'50+ accounts',            why:'· Tiny OEMs hidden'},
-    {name:'Date range filter',    condition:'Snapshot date from / to · stored in Supabase',   threshold:'All dates by default',    why:'· Compare data across weekly uploads'},
-    {name:'Baseline filter',      condition:'last activity exists · daysSince ≤ 180',          threshold:'180 days',                why:'· Same dead account exclusion as Dashboard'},
-  ].map(row).join('');
-
-  // ── DATA CLEANSING ──
-  const dcEl=document.getElementById('guide-cleansing');
-  if(dcEl) dcEl.innerHTML=[
-    {name:'No contact info',               condition:'dev=0 · no email · no company · no activity', threshold:'All 4 empty',            why:'· OEM shells or system-generated<br>· No real user'},
-    {name:'Orphaned accounts',            condition:'no email · no company · no activity',             threshold:'3 contact fields empty', why:'· Cannot be contacted<br>· Includes accounts with devices'},
-    {name:'Missing channel partner',  condition:'dev≥51 · channel partner empty · CP data in file', threshold:'51+ devices',           why:'· No revenue attribution<br>· Only shown when CSV has CP column'},
-    {name:'Malformed email',              condition:'email present · no "@" or no "."',                  threshold:'Basic format check',     why:'· Invalid email · CS outreach will fail'},
-    {name:'Company is a number',          condition:'company field = digits only',                           threshold:'Regex ^\\d+$',             why:'· Placeholder or data entry error'},
-    {name:'Country missing',              condition:'country empty or "nan"',                                threshold:'Empty',                  why:'· Affects regional filtering'},
-    {name:'Device count > 100k',          condition:'devices > 100,000',                                     threshold:'100k',                   why:'· Almost certainly a data error'},
-    {name:'Account > 10 years old',       condition:'created exists · age > 10 years',                       threshold:'10 years',               why:'· Legacy data · verify if still active'},
-  ].map(row).join('');
-
-  // ── PENDING ──
-  const pendEl=document.getElementById('guide-pending');
-  if(pendEl) pendEl.innerHTML=`
-    <div style="display:grid;grid-template-columns:140px 1fr;gap:10px;align-items:start;padding:.55rem .85rem;border-radius:8px;border:1.5px solid #EEEDFE;background:#f9f9fe;font-size:11px;margin-bottom:4px">
+  const pendEl = document.getElementById('guide-pending');
+  if(pendEl){
+    pendEl.innerHTML = `<div style="display:grid;grid-template-columns:140px 1fr;gap:10px;align-items:start;padding:.55rem .85rem;border-radius:8px;border:1.5px solid #EEEDFE;background:#f9f9fe;font-size:11px;margin-bottom:4px">
       <div style="font-weight:500;color:#534AB7">Dead account rule</div>
-      <div><div style="font-size:11px;background:#EEEDFE;padding:3px 8px;border-radius:3px;color:#534AB7;font-family:monospace">limited = TRUE AND last activity > 180 days ago</div><div class="guide-why" style="margin-top:3px">· Data now available — ready to activate</div></div>
+      <div><div style="font-size:11px;background:#EEEDFE;padding:3px 8px;border-radius:3px;color:#534AB7;font-family:monospace">limited = TRUE AND last activity > 180 days ago</div><div class="guide-why" style="margin-top:3px">Blocked: current shob only populates last_activity for ~36 days. Will activate once full data is available.</div></div>
     </div>
     <div style="display:grid;grid-template-columns:140px 1fr;gap:10px;align-items:start;padding:.55rem .85rem;border-radius:8px;border:1.5px solid #EEEDFE;background:#f9f9fe;font-size:11px;margin-bottom:4px">
       <div style="font-weight:500;color:#534AB7">Plan split upgrade</div>
-      <div><div style="font-size:11px;background:#EEEDFE;padding:3px 8px;border-radius:3px;color:#534AB7;font-family:monospace">last_activity within 180 days (replaces dev>0 AND cmd>0)</div><div class="guide-why" style="margin-top:3px">· Data now available — ready to activate</div></div>
-    </div>\`;
+      <div><div style="font-size:11px;background:#EEEDFE;padding:3px 8px;border-radius:3px;color:#534AB7;font-family:monospace">last_activity within 180 days (replaces dev>0 AND cmd>0)</div><div class="guide-why" style="margin-top:3px">Plan type split in Insights tab will use this filter once full last_activity data is available.</div></div>
+    </div>`;
+  }
 }
+
 /* ═══ INSIGHT SECTIONS ═══ (old trends - keep for compatibility) */
 /* ═══ PIE DRILLDOWN ═══ */
 let _pieDrillRows=[],_pieDrillTitle='',_pieDrillPage=0;
