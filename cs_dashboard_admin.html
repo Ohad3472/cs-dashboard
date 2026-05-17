@@ -1043,6 +1043,11 @@ function processData(raw,filename,dateStr){
     if(r.someLP)someLPCount++;
     if(r.allLP&&r.tr)allLPTrialCount++;
   }
+  setText('n-t0',counts.tier_0.toLocaleString());
+  setText('n-t1',counts.tier_1.toLocaleString());
+  setText('n-t2',counts.tier_2.toLocaleString());
+  setText('n-t3',counts.tier_3.toLocaleString());
+  setText('n-t4',counts.tier_4.toLocaleString());
   const sortedCpd=[...cpdVals].sort((a,b)=>a-b);
   const median=sortedCpd.length?sortedCpd[Math.floor(sortedCpd.length/2)]:0;
 
