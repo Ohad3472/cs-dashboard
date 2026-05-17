@@ -1811,6 +1811,9 @@ function filterDashAlerts(){
 
 
   ALERTS.forEach(a=>{const el=document.getElementById(ALERT_NUM_IDS[a.key]);if(el)el.textContent=(counts[a.key]||0).toLocaleString();});
+  // Device tier counts
+  const t0=baseData.filter(r=>r.dev<=1).length,t1=baseData.filter(r=>r.dev>=2&&r.dev<=10).length,t2=baseData.filter(r=>r.dev>=11&&r.dev<=50).length,t3=baseData.filter(r=>r.dev>=51&&r.dev<=100).length,t4=baseData.filter(r=>r.dev>100).length;
+  setText('n-t0',t0.toLocaleString());setText('n-t1',t1.toLocaleString());setText('n-t2',t2.toLocaleString());setText('n-t3',t3.toLocaleString());setText('n-t4',t4.toLocaleString());
   if(!window._hasCPData){const ncEl=document.getElementById('n-nocp');if(ncEl)ncEl.textContent='N/A';const ncCard=document.getElementById('card-nocp');if(ncCard)ncCard.style.opacity='0.45';}
   const active=fData.filter(r=>r.dev>0&&r.cmd>0&&r.daysSince!==null);
   const s90=active.length?Math.round(active.filter(r=>r.daysSince>90).length/active.length*100):0;
