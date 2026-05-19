@@ -671,9 +671,6 @@ if(sessionStorage.getItem('cs_auth')==='1'){
 
 <!-- ═══ DATA CLEANSING TAB ═══ -->
 <div class="tab-content" id="tab-cleansing">
-  <div style="background:#fff8f0;border:1px solid #fde8c8;border-radius:10px;padding:.75rem 1rem;margin-bottom:1rem;font-size:11px;color:#666;line-height:1.65">
-    These accounts have data quality or reachability issues. They are <strong>excluded from all Dashboard alert counts</strong> and should be passed to the <strong>data/ops team</strong>, not CS.
-  </div>
   <div id="dc-content"><div class="info-note">Load your xlsx to see data cleansing analysis</div></div>
 </div>
 
@@ -1605,50 +1602,68 @@ function renderCleansing(){
   const oldAcc      = allData.filter(r=>r.created&&(NOW-new Date(r.created))>10*365.25*24*3600*1000);
 
   function tbl(rows,cols){
-    if(!rows.length) return '<div style="color:#aaa;font-size:11px;padding:.5rem">No accounts</div>';
-    const hdr=cols.map(c=>`<th style="padding:4px 8px;font-weight:600;color:#555;font-size:10px;border-bottom:1px solid #e5e2db;text-align:left">${c.l}</th>`).join('');
-    const bdy=rows.slice(0,500).map(r=>`<tr>${cols.map(c=>`<td style="padding:3px 8px;font-size:11px;border-bottom:0.5px solid #f2f1ed">${r[c.k]!=null?r[c.k]:'—'}</td>`).join('')}</tr>`).join('');
-    const note=rows.length>500?`<div style="padding:4px 8px;font-size:10px;color:#aaa">Showing 500 of ${rows.length.toLocaleString()}</div>`:'';
-    return`<div style="overflow:auto;max-height:300px"><table style="width:100%;border-collapse:collapse"><thead><tr>${hdr}</tr></thead><tbody>${bdy}</tbody></table>${note}</div>`;
+    if(!rows.length) return '<div style="color:#aaa;font-size:12px;padding:.5rem">No accounts</div>';
+    const hdr=cols.map(c=>`<th style="padding:5px 10px;font-weight:600;color:#555;font-size:11px;border-bottom:1px solid #e5e2db;text-align:left">${c.l}</th>`).join('');
+    const bdy=rows.slice(0,500).map(r=>`<tr>${cols.map(c=>`<td style="padding:4px 10px;font-size:12px;border-bottom:0.5px solid #f2f1ed">${r[c.k]!=null?r[c.k]:'—'}</td>`).join('')}</tr>`).join('');
+    const note=rows.length>500?`<div style="padding:5px 10px;font-size:11px;color:#aaa">Showing 500 of ${rows.length.toLocaleString()}</div>`:'';
+    return`<div style="overflow:auto;max-height:320px"><table style="width:100%;border-collapse:collapse"><thead><tr>${hdr}</tr></thead><tbody>${bdy}</tbody></table>${note}</div>`;
   }
 
-  function card(title,sub,tag,count,rows,cols,color){
+  function card(title,sub,tag,count,rows,cols,color,badge){
     const id='dc-'+tag;
-    return`<div style="border:0.5px solid #e5e2db;border-radius:8px;overflow:hidden;margin-bottom:6px">
-      <div style="display:grid;grid-template-columns:1fr auto;align-items:center;padding:.6rem .9rem;background:#f8f7f3;cursor:pointer" onclick="const b=document.getElementById('${id}');b.style.display=b.style.display==='none'?'block':'none'">
-        <div><span style="font-weight:600;font-size:11px;color:#111">${title}</span><span style="font-size:10px;color:#888;margin-left:8px">${sub}</span></div>
-        <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13px;font-weight:700;color:${color}">${count.toLocaleString()}</span><span style="font-size:10px;color:#aaa">▼</span></div>
+    return`<div style="border:0.5px solid #e5e2db;border-radius:8px;overflow:hidden;margin-bottom:8px">
+      <div style="display:grid;grid-template-columns:1fr auto;align-items:center;padding:.75rem 1rem;background:#f8f7f3;cursor:pointer;gap:12px" onclick="const b=document.getElementById('${id}');b.style.display=b.style.display==='none'?'block':'none'">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+            <span style="font-weight:700;font-size:13px;color:#111">${title}</span>
+            <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:${color}22;color:${color}">${badge}</span>
+          </div>
+          <div style="font-size:12px;color:#888">${sub}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+          <span style="font-size:18px;font-weight:700;color:${color}">${count.toLocaleString()}</span>
+          <span style="font-size:11px;color:#aaa">▼</span>
+        </div>
       </div>
-      <div id="${id}" style="display:none;padding:.6rem .9rem">${tbl(rows,cols)}</div>
+      <div id="${id}" style="display:none;padding:.75rem 1rem">${tbl(rows,cols)}</div>
     </div>`;
   }
 
-  const cDom=[{k:'d',l:'Domain'},{k:'oem',l:'OEM'},{k:'dev',l:'Devices'}];
+  const cDom =[{k:'d',l:'Domain'},{k:'oem',l:'OEM'},{k:'dev',l:'Devices'}];
   const cFull=[{k:'d',l:'Domain'},{k:'oem',l:'OEM'},{k:'dev',l:'Devices'},{k:'email',l:'Email'},{k:'co',l:'Company'},{k:'ct',l:'Country'}];
-  const cCr=[{k:'d',l:'Domain'},{k:'oem',l:'OEM'},{k:'dev',l:'Devices'},{k:'cr',l:'Credits'}];
+  const cCr  =[{k:'d',l:'Domain'},{k:'oem',l:'OEM'},{k:'dev',l:'Devices'},{k:'cr',l:'Credits'}];
+  const cCP  =[{k:'d',l:'Domain'},{k:'oem',l:'OEM'},{k:'dev',l:'Devices'},{k:'email',l:'Email'}];
+  const cHuge=[{k:'d',l:'Domain'},{k:'oem',l:'OEM'},{k:'dev',l:'Devices'},{k:'cmd',l:'Commands'}];
 
   el.innerHTML=`
-    <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#A32D2D;margin:.5rem 0 .4rem">Excluded — implemented</div>
-    <div style="font-size:11px;color:#666;margin-bottom:.7rem">Automatically excluded from all alert counts and table rows on CSV upload.</div>
-    ${card('OEM parent / default accounts','domain ends with _default','excl-default',exclDefault.length,exclDefault,cDom,'#A32D2D')}
-    ${card('Test / demo / admin accounts','domain contains: test, demo, admin, adminel, internal, sandbox, sample, dummy, fake','excl-test',exclTest.length,exclTest,cDom,'#A32D2D')}
+    <div style="background:#fff0f0;border:1.5px solid #f5c0c0;border-radius:10px;padding:1rem 1.2rem;margin-bottom:1.2rem">
+      <div style="font-size:15px;font-weight:700;color:#A32D2D;margin-bottom:4px">✓ Excluded from dashboard</div>
+      <div style="font-size:13px;color:#666;margin-bottom:1rem">Automatically removed from all alert counts and account rows on every CSV upload.</div>
+      ${card('OEM parent / default accounts','Domains ending with _default','excl-default',exclDefault.length,exclDefault,cDom,'#A32D2D','excluded')}
+      ${card('Test / demo / admin accounts','Domains containing: test, demo, admin, internal, sandbox, sample, dummy, fake','excl-test',exclTest.length,exclTest,cDom,'#A32D2D','excluded')}
+    </div>
 
-    <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#854F0B;margin:1.1rem 0 .4rem">Needs further investigation — not yet excluded</div>
-    <div style="font-size:11px;color:#666;margin-bottom:.7rem">These accounts appear in dashboard counts. Review with data/ops team before deciding to exclude.</div>
-    ${card('Ghost accounts','0 devices · no email · no company · no activity — likely OEM shells or system-generated','ghost',ghost.length,ghost,cFull,'#854F0B')}
-    ${card('Numeric-only domains','domain contains only digits — likely system-generated or placeholder','numeric',numeric.length,numeric,cFull,'#854F0B')}
-    ${card('Very short domains','domain is 1–2 characters — likely placeholder','short',shortDom.length,shortDom,cFull,'#854F0B')}
-    ${card('Extreme negative credits','credits below -1,000 — likely data error (27 accounts below -1k, 9 below -10k)','extreme-neg',extremeNeg.length,extremeNeg,cCr,'#854F0B')}
-    ${card('Large accounts — no contact email','51+ devices but no email — CS cannot reach','large-no-email',largeNoEmail.length,largeNoEmail,cFull,'#854F0B')}
+    <div style="background:#fff8f0;border:1.5px solid #fde8c8;border-radius:10px;padding:1rem 1.2rem;margin-bottom:1.2rem">
+      <div style="font-size:15px;font-weight:700;color:#854F0B;margin-bottom:4px">⚠ Still in dashboard — needs investigation</div>
+      <div style="font-size:13px;color:#666;margin-bottom:1rem">These accounts are still counted in alerts. Review with the data/ops team before deciding to exclude.</div>
+      ${card('Ghost accounts','0 devices · no email · no company · no activity','ghost',ghost.length,ghost,cFull,'#854F0B','in dashboard')}
+      ${card('Numeric-only domains','Domain is digits only — likely system-generated','numeric',numeric.length,numeric,cFull,'#854F0B','in dashboard')}
+      ${card('Very short domains','Domain is 1–2 characters — likely placeholder','short',shortDom.length,shortDom,cFull,'#854F0B','in dashboard')}
+      ${card('Extreme negative credits','Credits below -1,000 — likely a data error','extreme-neg',extremeNeg.length,extremeNeg,cCr,'#854F0B','in dashboard')}
+      ${card('Large accounts — no contact email','51+ devices but no email — CS cannot reach','large-no-email',largeNoEmail.length,largeNoEmail,cFull,'#854F0B','in dashboard')}
+    </div>
 
-    <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#185FA5;margin:1.1rem 0 .4rem">Existing quality checks</div>
-    ${card('Orphaned accounts','no email · no company · no activity','orphaned',orphaned.length,orphaned,cFull,'#185FA5')}
-    ${card('51+ devices · no channel partner','large account with no revenue attribution — only shown when CSV includes CP column','nocp',noCP.length,noCP.map(r=>({d:r.d,oem:r.oem,dev:r.dev,email:r.email})),[{k:'d',l:'Domain'},{k:'oem',l:'OEM'},{k:'dev',l:'Devices'},{k:'email',l:'Email'}],'#185FA5')}
-    ${card('Malformed email','email present but invalid format — CS outreach will fail','bad-email',badEmail.length,badEmail,cFull,'#185FA5')}
-    ${card('Company name is a number','company field contains only digits','co-num',coIsNum.length,coIsNum,cFull,'#185FA5')}
-    ${card('Country missing','no country recorded — affects regional filtering','no-ct',noCt.length,noCt,cFull,'#185FA5')}
-    ${card('Device count > 100,000','almost certainly a data error','huge-dev',hugeDev.length,hugeDev,[{k:'d',l:'Domain'},{k:'oem',l:'OEM'},{k:'dev',l:'Devices'},{k:'cmd',l:'Commands'}],'#185FA5')}
-    ${card('Account > 10 years old','legacy data — verify if still active','old-acc',oldAcc.length,oldAcc,cFull,'#185FA5')}
+    <div style="background:#f0f4ff;border:1.5px solid #c8d5f5;border-radius:10px;padding:1rem 1.2rem">
+      <div style="font-size:15px;font-weight:700;color:#185FA5;margin-bottom:4px">ℹ Standard quality checks</div>
+      <div style="font-size:13px;color:#666;margin-bottom:1rem">Known data quality issues included in the dashboard. Flagged here for ops team review.</div>
+      ${card('Orphaned accounts','No email · no company · no activity','orphaned',orphaned.length,orphaned,cFull,'#185FA5','in dashboard')}
+      ${card('51+ devices · no channel partner','Large account with no revenue attribution','nocp',noCP.length,noCP.map(r=>({d:r.d,oem:r.oem,dev:r.dev,email:r.email})),cCP,'#185FA5','in dashboard')}
+      ${card('Malformed email','Email present but invalid format — outreach will fail','bad-email',badEmail.length,badEmail,cFull,'#185FA5','in dashboard')}
+      ${card('Company name is a number','Company field contains only digits','co-num',coIsNum.length,coIsNum,cFull,'#185FA5','in dashboard')}
+      ${card('Country missing','No country recorded','no-ct',noCt.length,noCt,cFull,'#185FA5','in dashboard')}
+      ${card('Device count > 100,000','Almost certainly a data error','huge-dev',hugeDev.length,hugeDev,cHuge,'#185FA5','in dashboard')}
+      ${card('Account > 10 years old','Legacy data — verify if still active','old-acc',oldAcc.length,oldAcc,cFull,'#185FA5','in dashboard')}
+    </div>
   `;
 }
 
