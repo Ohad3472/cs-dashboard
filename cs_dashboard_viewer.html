@@ -1606,8 +1606,8 @@ function renderCleansing(){
   const cHuge=[{k:'d',l:'Domain'},{k:'oem',l:'OEM'},{k:'dev',l:'Devices'},{k:'cmd',l:'Commands'}];
 
   el.innerHTML=`
-    <div style="background:#f4fdf6;border:1.5px solid #c8efd4;border-radius:10px;padding:1rem 1.2rem;margin-bottom:1.2rem">
-      <div style="font-size:15px;font-weight:700;color:#2e7d4f;margin-bottom:4px">✓ Excluded from dashboard</div>
+    <div style="background:#f9fefb;border:1.5px solid #ddf2e4;border-radius:10px;padding:1rem 1.2rem;margin-bottom:1.2rem">
+      <div style="font-size:15px;font-weight:700;color:#3a9460;margin-bottom:4px">✓ Excluded from dashboard</div>
       <div style="font-size:13px;color:#666;margin-bottom:1rem">Automatically removed from all alert counts and account rows on every CSV upload.</div>
       ${card('OEM parent / default accounts','Domains ending with _default','excl-default',exclDefault.length,exclDefault,cDom,'#1a7a3c','excluded')}
       ${card('Test / demo / admin accounts','Domains containing: test, demo, admin, internal, sandbox, sample, dummy, fake','excl-test',exclTest.length,exclTest,cDom,'#1a7a3c','excluded')}
