@@ -723,7 +723,7 @@ if(sessionStorage.getItem('cs_auth')==='1'){
 const PAGE=50, TRIAL_PAGE=50;
 const LOW_CMD=2, DECLINE_DAYS=30, EXPIRY_CAP=1095, SINGLE_DEV_DAYS=90;
 const EXCLUDE_COUNTRY='ghana';
-const TODAY=new Date('2026-05-10');
+const TODAY=new Date();TODAY.setHours(0,0,0,0);
 const LS_KEY='cs_dash_v7';
 /* ═══ SUPABASE ═══ */
 const SUPA_URL='https://pkyngucjjcdukfhhqysh.supabase.co';
@@ -1625,7 +1625,7 @@ function renderCleansing(){
 
 /* ═══ ALERT GUIDE TAB ═══ */
 const GUIDE_ALERTS = [
-  {cat:'churn', name:'Large accounts — gone silent',  condition:'dev ≥51 · has last activity · active within window · silent >30d', threshold:'51+ dev · silent 30+ days', why:'· High-value accounts that were active but stopped<br>· Count grows as window extends<br>· Priority churn conversations'},
+  {cat:'churn', name:'Large accounts — gone silent',  condition:'dev ≥51 · has last activity · last activity within selected window · silent >30d', threshold:'51+ dev · silent 30+ days', why:'· High-value accounts active within your window but silent >30d<br>· Count grows as window extends<br>· Priority churn conversations'},
   {cat:'churn', name:'Small accounts — gone dark',    condition:'dev >0 · cmd >0 · silent >30d',                                          threshold:'30 days silent',            why:'· Was active, now gone dark<br>· Still has devices — recoverable'},
   {cat:'churn', name:'Signed up — never started',    condition:'dev =0 · has email OR company OR activity',                                 threshold:'0 devices, reachable',      why:'· Signed up but never set up<br>· CS has a contact to reach'},
   {cat:'churn', name:'Trial — ending soon',          condition:'trial=TRUE · 0 < days left ≤30',                                       threshold:'7 days remaining',          why:'· Active trial expiring within 7 days<br>· See Trial Monitor for full breakdown'},
@@ -1841,6 +1841,9 @@ function filterDashAlerts(){
 
 
   ALERTS.forEach(a=>{const el=document.getElementById(ALERT_NUM_IDS[a.key]);if(el)el.textContent=(counts[a.key]||0).toLocaleString();});
+  // Device tier counts
+  const t0=baseData.filter(r=>r.dev<=1).length,t1=baseData.filter(r=>r.dev>=2&&r.dev<=10).length,t2=baseData.filter(r=>r.dev>=11&&r.dev<=50).length,t3=baseData.filter(r=>r.dev>=51&&r.dev<=100).length,t4=baseData.filter(r=>r.dev>100).length;
+  setText('n-t0',t0.toLocaleString());setText('n-t1',t1.toLocaleString());setText('n-t2',t2.toLocaleString());setText('n-t3',t3.toLocaleString());setText('n-t4',t4.toLocaleString());
   if(!window._hasCPData){const ncEl=document.getElementById('n-nocp');if(ncEl)ncEl.textContent='N/A';const ncCard=document.getElementById('card-nocp');if(ncCard)ncCard.style.opacity='0.45';}
   const active=fData.filter(r=>r.dev>0&&r.cmd>0&&r.daysSince!==null);
   const s90=active.length?Math.round(active.filter(r=>r.daysSince>90).length/active.length*100):0;
