@@ -1606,11 +1606,11 @@ function renderCleansing(){
   const cHuge=[{k:'d',l:'Domain'},{k:'oem',l:'OEM'},{k:'dev',l:'Devices'},{k:'cmd',l:'Commands'}];
 
   el.innerHTML=`
-    <div style="background:#fff0f0;border:1.5px solid #f5c0c0;border-radius:10px;padding:1rem 1.2rem;margin-bottom:1.2rem">
-      <div style="font-size:15px;font-weight:700;color:#A32D2D;margin-bottom:4px">✓ Excluded from dashboard</div>
+    <div style="background:#f0fff4;border:1.5px solid #a8e6be;border-radius:10px;padding:1rem 1.2rem;margin-bottom:1.2rem">
+      <div style="font-size:15px;font-weight:700;color:#1a7a3c;margin-bottom:4px">✓ Excluded from dashboard</div>
       <div style="font-size:13px;color:#666;margin-bottom:1rem">Automatically removed from all alert counts and account rows on every CSV upload.</div>
-      ${card('OEM parent / default accounts','Domains ending with _default','excl-default',exclDefault.length,exclDefault,cDom,'#A32D2D','excluded')}
-      ${card('Test / demo / admin accounts','Domains containing: test, demo, admin, internal, sandbox, sample, dummy, fake','excl-test',exclTest.length,exclTest,cDom,'#A32D2D','excluded')}
+      ${card('OEM parent / default accounts','Domains ending with _default','excl-default',exclDefault.length,exclDefault,cDom,'#1a7a3c','excluded')}
+      ${card('Test / demo / admin accounts','Domains containing: test, demo, admin, internal, sandbox, sample, dummy, fake','excl-test',exclTest.length,exclTest,cDom,'#1a7a3c','excluded')}
     </div>
 
     <div style="background:#fff8f0;border:1.5px solid #fde8c8;border-radius:10px;padding:1rem 1.2rem;margin-bottom:1.2rem">
