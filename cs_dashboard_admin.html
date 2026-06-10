@@ -520,6 +520,7 @@ if(sessionStorage.getItem('cs_auth')==='1'){
         <input type="text" id="search" placeholder="Search domain, company, country…" oninput="applyFilters()">
         <button class="btn" onclick="clearAll()">Show all</button>
         <button class="btn green" onclick="document.getElementById('file-input').click()">↑ Load new xlsx</button>
+        <button class="btn" id="standalone-btn" onclick="generateStandalone()" style="display:none;background:#534AB7;color:#fff;border-color:#534AB7">⬇ Download standalone viewer</button>
       </div>
     </div>
     <div class="chips" id="chips"></div>
@@ -797,7 +798,7 @@ async function saveSnaps(){
     body:JSON.stringify({report_date:snap.date,filename:snap.filename,snap_data:snap,account_data:b64})
   });
   if(!r.ok){const err=await r.text();console.error('Supabase save error:',r.status,err);}
-  else{console.log('Saved to Supabase OK:',snap.date,'accounts:',lean.length);}
+  else{console.log('Saved to Supabase OK:',snap.date,'accounts:',lean.length);const sb=document.getElementById('standalone-btn');if(sb)sb.style.display='';}
 }
 
 async function deleteSnapRemote(date){
@@ -1092,6 +1093,7 @@ function processData(raw,filename,dateStr){
   if(idx>=0)snapshots[idx]=snap;else snapshots.push(snap);
   snapshots.sort((a,b)=>a.date.localeCompare(b.date));
   saveSnaps().catch(e=>console.error('Save failed:',e));
+  const _sb=document.getElementById('standalone-btn');if(_sb)_sb.style.display='';
 
   dz.classList.add('loaded');
   dz.innerHTML=`<div style="display:flex;align-items:center;gap:12px;padding:.5rem .75rem;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;flex-wrap:wrap">
@@ -2221,6 +2223,80 @@ function buildTestTab(data, oemFilter){
     const _ss=document.getElementById('silence-strip');if(_ss)_ss.style.display='';
   }
 })();
+
+async function generateStandalone(){
+  try{
+    // Build lean data (same as saveSnaps)
+    const snap=snapshots[snapshots.length-1];
+    const lean=allData.map(r=>({d:r.d,co:r.co,ct:r.ct,em:r.email,oem:r.oem,dev:r.dev,cmd:r.cmd,
+      cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.tr,td:r.trDays,di:r.daysIntoTrial,lim:r.lim,lp:r.lowP,
+      f:r.f,tl:r.tl}));
+    const leanJSON=JSON.stringify(lean);
+    const snapJSON=JSON.stringify(snap||{});
+
+    // Fetch the viewer HTML from GitHub
+    const btn=document.getElementById('standalone-btn');
+    const origText=btn.textContent;
+    btn.textContent='Generating...';btn.disabled=true;
+
+    let viewerHtml;
+    try{
+      const resp=await fetch('https://ohad3472.github.io/cs-dashboard/cs_dashboard_viewer.html');
+      if(!resp.ok) throw new Error('fetch failed');
+      viewerHtml=await resp.text();
+    }catch(e){
+      // Fallback: use current page's viewer (same codebase minus admin parts)
+      btn.textContent='Could not fetch viewer. Use GitHub upload instead.';
+      btn.disabled=false;
+      return;
+    }
+
+    // Inject standalone data — replace loadSnaps with embedded version
+    const escapedLean=leanJSON.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$\{/g,'\\${');
+    const escapedSnap=snapJSON.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$\{/g,'\\${');
+
+    // Replace the loadSnaps function body to use embedded data
+    const standaloneLoadSnaps=`async function loadSnaps(){
+  // STANDALONE MODE — embedded data, no Supabase
+  try{
+    const lean=JSON.parse(\`${escapedLean}\`);
+    const snap=JSON.parse(\`${escapedSnap}\`);
+    allData=lean.map(r=>({d:r.d||'',co:r.co||'',ct:r.ct||'',email:r.em||'',oem:r.oem||'undefined',
+      dev:r.dev||0,cmd:r.cmd||0,cr:r.cr!=null?r.cr:null,daysSince:r.ds!=null?r.ds:null,
+      daysCreated:r.dc!=null?r.dc:null,la:r.la||'',tr:r.tr||false,trDays:r.td!=null?r.td:null,daysIntoTrial:r.di!=null?r.di:null,
+      lim:r.lim||false,lowP:r.lp||0,f:r.f||[],tl:r.tl||'amber',
+      cpd:r.dev>0?Math.round(r.cmd/r.dev*10)/10:0,created:r.la||''}));
+    if(snap&&snap.date)snapshots=[snap];
+    console.log('Standalone mode:',allData.length,'accounts loaded');
+  }catch(e){console.error('Standalone load error:',e);}
+}`;
+
+    // Find and replace loadSnaps in viewer
+    const lsStart=viewerHtml.indexOf('async function loadSnaps(){');
+    const lsEnd=viewerHtml.indexOf('\nasync function saveSnaps()',lsStart);
+    let standalone;
+    if(lsStart>0&&lsEnd>0){
+      standalone=viewerHtml.slice(0,lsStart)+standaloneLoadSnaps+viewerHtml.slice(lsEnd);
+    } else {
+      standalone=viewerHtml; // fallback — inject at end
+    }
+
+    // Download
+    const blob=new Blob([standalone],{type:'text/html'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const date=(snap&&snap.date)||new Date().toISOString().slice(0,10);
+    a.href=url;
+    a.download=`cs_dashboard_standalone_${date}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+    btn.textContent=origText;btn.disabled=false;
+  }catch(e){
+    console.error('generateStandalone error:',e);
+    alert('Error generating standalone file: '+e.message);
+  }
+}
+
 </script>
 </body>
 </html>
