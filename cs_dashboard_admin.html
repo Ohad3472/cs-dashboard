@@ -884,11 +884,20 @@ function switchTab(t){
 /* ═══ DROP ZONE ═══ */
 const dz=document.getElementById('drop-zone');
 let _dragDepth=0;
+// Named handlers so we can safely remove and re-add
+function _onDragEnter(e){e.preventDefault();_dragDepth++;e.currentTarget.classList.add('drag-over');}
+function _onDragLeave(e){e.preventDefault();if(--_dragDepth<=0){_dragDepth=0;e.currentTarget.classList.remove('drag-over');}}
+function _onDragOver(e){e.preventDefault();}
+function _onDrop(e){e.preventDefault();_dragDepth=0;e.currentTarget.classList.remove('drag-over');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);}
 function attachDrag(el){
-  el.addEventListener('dragenter',e=>{e.preventDefault();_dragDepth++;el.classList.add('drag-over');});
-  el.addEventListener('dragleave',e=>{e.preventDefault();if(--_dragDepth<=0){_dragDepth=0;el.classList.remove('drag-over');}});
-  el.addEventListener('dragover',e=>{e.preventDefault();});
-  el.addEventListener('drop',e=>{e.preventDefault();_dragDepth=0;el.classList.remove('drag-over');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
+  el.removeEventListener('dragenter',_onDragEnter);
+  el.removeEventListener('dragleave',_onDragLeave);
+  el.removeEventListener('dragover',_onDragOver);
+  el.removeEventListener('drop',_onDrop);
+  el.addEventListener('dragenter',_onDragEnter);
+  el.addEventListener('dragleave',_onDragLeave);
+  el.addEventListener('dragover',_onDragOver);
+  el.addEventListener('drop',_onDrop);
 }
 attachDrag(dz);
 function handleFile(f){
@@ -2228,11 +2237,13 @@ async function generateStandalone(){
   try{
     // Build lean data (same as saveSnaps)
     const snap=snapshots[snapshots.length-1];
+    const allSnaps=snapshots;
     const lean=allData.map(r=>({d:r.d,co:r.co,ct:r.ct,em:r.email,oem:r.oem,dev:r.dev,cmd:r.cmd,
       cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.tr,td:r.trDays,di:r.daysIntoTrial,lim:r.lim,lp:r.lowP,
       f:r.f,tl:r.tl}));
     const leanJSON=JSON.stringify(lean);
     const snapJSON=JSON.stringify(snap||{});
+    const allSnapsJSON=JSON.stringify(allSnaps||[]);
 
     // Fetch the viewer HTML from GitHub
     const btn=document.getElementById('standalone-btn');
@@ -2254,6 +2265,7 @@ async function generateStandalone(){
     // Inject standalone data — replace loadSnaps with embedded version
     const escapedLean=leanJSON.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$\{/g,'\\${');
     const escapedSnap=snapJSON.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$\{/g,'\\${');
+    const escapedAllSnaps=allSnapsJSON.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$\{/g,'\\${');
 
     // Replace the loadSnaps function body to use embedded data
     const standaloneLoadSnaps=`async function loadSnaps(){
@@ -2261,12 +2273,13 @@ async function generateStandalone(){
   try{
     const lean=JSON.parse(\`${escapedLean}\`);
     const snap=JSON.parse(\`${escapedSnap}\`);
+    const allSnaps=JSON.parse(\`${escapedAllSnaps}\`);
     allData=lean.map(r=>({d:r.d||'',co:r.co||'',ct:r.ct||'',email:r.em||'',oem:r.oem||'undefined',
       dev:r.dev||0,cmd:r.cmd||0,cr:r.cr!=null?r.cr:null,daysSince:r.ds!=null?r.ds:null,
       daysCreated:r.dc!=null?r.dc:null,la:r.la||'',tr:r.tr||false,trDays:r.td!=null?r.td:null,daysIntoTrial:r.di!=null?r.di:null,
       lim:r.lim||false,lowP:r.lp||0,f:r.f||[],tl:r.tl||'amber',
       cpd:r.dev>0?Math.round(r.cmd/r.dev*10)/10:0,created:r.la||''}));
-    if(snap&&snap.date)snapshots=[snap];
+    if(allSnaps&&allSnaps.length)snapshots=allSnaps;else if(snap&&snap.date)snapshots=[snap];
     console.log('Standalone mode:',allData.length,'accounts loaded');
   }catch(e){console.error('Standalone load error:',e);}
 }`;
