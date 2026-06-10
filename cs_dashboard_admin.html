@@ -902,7 +902,7 @@ function attachDrag(el){
 attachDrag(dz);
 function handleFile(f){
   pendingFile=f;pendingFilename=f.name;
-  const m=f.name.match(/(\d{4})(\d{2})(\d{2})/);
+  const m=f.name.match(/(\d{4})[-_]?(\d{2})[-_]?(\d{2})/);
   document.getElementById('modal-filename').textContent='📄 '+f.name;
   document.getElementById('modal-date').value=m?`${m[1]}-${m[2]}-${m[3]}`:'';
   document.getElementById('date-modal').classList.add('visible');
