@@ -431,6 +431,31 @@ select.filter-sel{font-size:12px;padding:4px 10px;border:1px solid #ddd;border-r
           <div class="acard placeholder"><div style="font-size:10px;color:#ccc;text-align:center">More signals<br>coming soon</div></div>
         </div>
       </div>
+
+      <!-- ACTIVATION RATE -->
+      <div class="alert-row" id="activation-row" style="display:none">
+        <div class="row-pill" style="background:#2563EB;font-size:10px;font-weight:700;color:#fff;padding:.4rem .6rem;border-radius:6px;text-align:center;line-height:1.3">Activation<br>rate</div>
+        <div class="cards-row" style="display:grid;grid-template-columns:1fr 1.8fr 1.2fr;gap:8px">
+          <div class="acard" style="background:#fff;cursor:default;border-color:#e5e2db">
+            <div style="font-size:28px;font-weight:700;color:#2563EB" id="n-act-rate">—</div>
+            <div class="card-label">Activation rate</div>
+            <div class="card-sub" id="n-act-cohort">Non-trial · 60–365 days old</div>
+          </div>
+          <div class="acard" style="background:#fff;cursor:default;border-color:#e5e2db">
+            <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:8px">Breakdown — <span id="n-act-total">—</span> accounts in cohort</div>
+            <div id="act-breakdown-bar" style="height:12px;border-radius:6px;overflow:hidden;display:flex;margin-bottom:8px"></div>
+            <div style="display:flex;gap:16px;font-size:11px;flex-wrap:wrap">
+              <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#1D9E75;display:inline-block"></span>Activated: <strong id="n-act-yes">—</strong></span>
+              <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#EF9F27;display:inline-block"></span>Low usage: <strong id="n-act-low">—</strong></span>
+              <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#E24B4A;display:inline-block"></span>No device: <strong id="n-act-none">—</strong></span>
+            </div>
+          </div>
+          <div class="acard" style="background:#fff;cursor:default;border-color:#e5e2db">
+            <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:6px">Trend</div>
+            <div id="act-trend" style="font-size:11px;color:#aaa">Upload more snapshots to see trend</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- INSIGHT PANELS -->
@@ -1859,6 +1884,26 @@ function filterDashAlerts(){
   // Device tier counts
   const t0=baseData.filter(r=>r.dev<=1).length,t1=baseData.filter(r=>r.dev>=2&&r.dev<=10).length,t2=baseData.filter(r=>r.dev>=11&&r.dev<=50).length,t3=baseData.filter(r=>r.dev>=51&&r.dev<=100).length,t4=baseData.filter(r=>r.dev>100).length;
   setText('n-t0',t0.toLocaleString());setText('n-t1',t1.toLocaleString());setText('n-t2',t2.toLocaleString());setText('n-t3',t3.toLocaleString());setText('n-t4',t4.toLocaleString());
+  // ── Activation rate ──
+  const _actCohort=baseData.filter(r=>!r.tr&&r.daysCreated!=null&&r.daysCreated>=60&&r.daysCreated<=365);
+  const _actYes=_actCohort.filter(r=>r.dev>=1&&(r.cmd/r.dev)>=2);
+  const _actLow=_actCohort.filter(r=>r.dev>=1&&(r.cmd/r.dev)<2);
+  const _actNone=_actCohort.filter(r=>r.dev===0);
+  const _actRate=_actCohort.length>0?(_actYes.length/_actCohort.length*100).toFixed(1):0;
+  const _actRow=document.getElementById('activation-row');
+  if(_actRow&&_actCohort.length>0){
+    _actRow.style.display='';
+    setText('n-act-rate',_actRate+'%');
+    setText('n-act-total',_actCohort.length.toLocaleString());
+    setText('n-act-yes',_actYes.length.toLocaleString()+' ('+(_actYes.length/_actCohort.length*100).toFixed(0)+'%)');
+    setText('n-act-low',_actLow.length.toLocaleString()+' ('+(_actLow.length/_actCohort.length*100).toFixed(0)+'%)');
+    setText('n-act-none',_actNone.length.toLocaleString()+' ('+(_actNone.length/_actCohort.length*100).toFixed(0)+'%)');
+    const bar=document.getElementById('act-breakdown-bar');
+    if(bar){bar.innerHTML=`<div style="width:${(_actYes.length/_actCohort.length*100).toFixed(1)}%;background:#1D9E75"></div><div style="width:${(_actLow.length/_actCohort.length*100).toFixed(1)}%;background:#EF9F27"></div><div style="width:${(_actNone.length/_actCohort.length*100).toFixed(1)}%;background:#E24B4A"></div>`;}
+    const _actSnaps=snapshots.filter(s=>s.counts&&s.counts.act_rate!=null);
+    const trend=document.getElementById('act-trend');
+    if(trend&&_actSnaps.length>=2){trend.innerHTML=_actSnaps.slice(-6).map(s=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:0.5px solid #f2f1ed"><span style="color:#888">${s.date}</span><span style="font-weight:600;color:#2563EB">${s.counts.act_rate}%</span></div>`).join('');}
+  }
   if(!window._hasCPData){const ncEl=document.getElementById('n-nocp');if(ncEl)ncEl.textContent='N/A';const ncCard=document.getElementById('card-nocp');if(ncCard)ncCard.style.opacity='0.45';}
   const active=fData.filter(r=>r.dev>0&&r.cmd>0&&r.daysSince!==null);
   const s90=active.length?Math.round(active.filter(r=>r.daysSince>90).length/active.length*100):0;

@@ -461,6 +461,31 @@ if(sessionStorage.getItem('cs_auth')==='1'){
           <div class="acard placeholder"><div style="font-size:10px;color:#ccc;text-align:center">More signals<br>coming soon</div></div>
         </div>
       </div>
+
+      <!-- ACTIVATION RATE -->
+      <div class="alert-row" id="activation-row" style="display:none">
+        <div class="row-pill" style="background:#2563EB;font-size:10px;font-weight:700;color:#fff;padding:.4rem .6rem;border-radius:6px;text-align:center;line-height:1.3">Activation<br>rate</div>
+        <div class="cards-row" style="display:grid;grid-template-columns:1fr 1.8fr 1.2fr;gap:8px">
+          <div class="acard" style="background:#fff;cursor:default;border-color:#e5e2db">
+            <div style="font-size:28px;font-weight:700;color:#2563EB" id="n-act-rate">—</div>
+            <div class="card-label">Activation rate</div>
+            <div class="card-sub" id="n-act-cohort">Non-trial · 60–365 days old</div>
+          </div>
+          <div class="acard" style="background:#fff;cursor:default;border-color:#e5e2db">
+            <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:8px">Breakdown — <span id="n-act-total">—</span> accounts in cohort</div>
+            <div id="act-breakdown-bar" style="height:12px;border-radius:6px;overflow:hidden;display:flex;margin-bottom:8px"></div>
+            <div style="display:flex;gap:16px;font-size:11px;flex-wrap:wrap">
+              <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#1D9E75;display:inline-block"></span>Activated: <strong id="n-act-yes">—</strong></span>
+              <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#EF9F27;display:inline-block"></span>Low usage: <strong id="n-act-low">—</strong></span>
+              <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#E24B4A;display:inline-block"></span>No device: <strong id="n-act-none">—</strong></span>
+            </div>
+          </div>
+          <div class="acard" style="background:#fff;cursor:default;border-color:#e5e2db">
+            <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:6px">Trend</div>
+            <div id="act-trend" style="font-size:11px;color:#aaa">Upload more snapshots to see trend</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- INSIGHT PANELS -->
@@ -798,7 +823,7 @@ async function saveSnaps(){
     body:JSON.stringify({report_date:snap.date,filename:snap.filename,snap_data:snap,account_data:b64})
   });
   if(!r.ok){const err=await r.text();console.error('Supabase save error:',r.status,err);}
-  else{console.log('Saved to Supabase OK:',snap.date,'accounts:',lean.length);const sb=document.getElementById('standalone-btn');if(sb)sb.style.display='';}
+  else{console.log('Saved to Supabase OK:',snap.date,'accounts:',lean.length);}
 }
 
 async function deleteSnapRemote(date){
@@ -884,7 +909,6 @@ function switchTab(t){
 /* ═══ DROP ZONE ═══ */
 const dz=document.getElementById('drop-zone');
 let _dragDepth=0;
-// Named handlers so we can safely remove and re-add
 function _onDragEnter(e){e.preventDefault();_dragDepth++;e.currentTarget.classList.add('drag-over');}
 function _onDragLeave(e){e.preventDefault();if(--_dragDepth<=0){_dragDepth=0;e.currentTarget.classList.remove('drag-over');}}
 function _onDragOver(e){e.preventDefault();}
@@ -902,7 +926,7 @@ function attachDrag(el){
 attachDrag(dz);
 function handleFile(f){
   pendingFile=f;pendingFilename=f.name;
-  const m=f.name.match(/(\d{4})[-_]?(\d{2})[-_]?(\d{2})/);
+  const m=f.name.match(/(\d{4})[-_. ]?(\d{2})[-_. ]?(\d{2})/);
   document.getElementById('modal-filename').textContent='📄 '+f.name;
   document.getElementById('modal-date').value=m?`${m[1]}-${m[2]}-${m[3]}`:'';
   document.getElementById('date-modal').classList.add('visible');
@@ -1050,6 +1074,9 @@ function processData(raw,filename,dateStr){
   const counts={};ALERTS.forEach(a=>counts[a.key]=0);
   ['tier_0','tier_1','tier_2','tier_3','tier_4'].forEach(k=>counts[k]=0);
   let cpdVals=[],someLPCount=0,allLPTrialCount=0;
+  const _sc=allData.filter(r=>!r.tr&&r.daysCreated!=null&&r.daysCreated>=60&&r.daysCreated<=365);
+  const _sy=_sc.filter(r=>r.dev>=1&&(r.cmd/r.dev)>=2);
+  if(_sc.length>0) counts.act_rate=parseFloat((_sy.length/_sc.length*100).toFixed(1));
   for(const r of allData){
     if(DEAD_FILTER(r))r.f.forEach(f=>{if(counts[f]!==undefined)counts[f]++;});
     if(r.dev<=1)counts.tier_0++;else if(r.dev<=10)counts.tier_1++;else if(r.dev<=50)counts.tier_2++;else if(r.dev<=100)counts.tier_3++;else counts.tier_4++;
@@ -1102,7 +1129,6 @@ function processData(raw,filename,dateStr){
   if(idx>=0)snapshots[idx]=snap;else snapshots.push(snap);
   snapshots.sort((a,b)=>a.date.localeCompare(b.date));
   saveSnaps().catch(e=>console.error('Save failed:',e));
-  const _sb=document.getElementById('standalone-btn');if(_sb)_sb.style.display='';
 
   dz.classList.add('loaded');
   dz.innerHTML=`<div style="display:flex;align-items:center;gap:12px;padding:.5rem .75rem;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;flex-wrap:wrap">
@@ -1901,6 +1927,26 @@ function filterDashAlerts(){
   const t0=baseData.filter(r=>r.dev<=1).length,t1=baseData.filter(r=>r.dev>=2&&r.dev<=10).length,t2=baseData.filter(r=>r.dev>=11&&r.dev<=50).length,t3=baseData.filter(r=>r.dev>=51&&r.dev<=100).length,t4=baseData.filter(r=>r.dev>100).length;
   setText('n-t0',t0.toLocaleString());setText('n-t1',t1.toLocaleString());setText('n-t2',t2.toLocaleString());setText('n-t3',t3.toLocaleString());setText('n-t4',t4.toLocaleString());
   if(!window._hasCPData){const ncEl=document.getElementById('n-nocp');if(ncEl)ncEl.textContent='N/A';const ncCard=document.getElementById('card-nocp');if(ncCard)ncCard.style.opacity='0.45';}
+  // ── Activation rate ──
+  const _actCohort=baseData.filter(r=>!r.tr&&r.daysCreated!=null&&r.daysCreated>=60&&r.daysCreated<=365);
+  const _actYes=_actCohort.filter(r=>r.dev>=1&&(r.cmd/r.dev)>=2);
+  const _actLow=_actCohort.filter(r=>r.dev>=1&&(r.cmd/r.dev)<2);
+  const _actNone=_actCohort.filter(r=>r.dev===0);
+  const _actRate=_actCohort.length>0?(_actYes.length/_actCohort.length*100).toFixed(1):0;
+  const _actRow=document.getElementById('activation-row');
+  if(_actRow&&_actCohort.length>0){
+    _actRow.style.display='';
+    setText('n-act-rate',_actRate+'%');
+    setText('n-act-total',_actCohort.length.toLocaleString());
+    setText('n-act-yes',_actYes.length.toLocaleString()+' ('+(_actYes.length/_actCohort.length*100).toFixed(0)+'%)');
+    setText('n-act-low',_actLow.length.toLocaleString()+' ('+(_actLow.length/_actCohort.length*100).toFixed(0)+'%)');
+    setText('n-act-none',_actNone.length.toLocaleString()+' ('+(_actNone.length/_actCohort.length*100).toFixed(0)+'%)');
+    const bar=document.getElementById('act-breakdown-bar');
+    if(bar){bar.innerHTML=`<div style="width:${(_actYes.length/_actCohort.length*100).toFixed(1)}%;background:#1D9E75"></div><div style="width:${(_actLow.length/_actCohort.length*100).toFixed(1)}%;background:#EF9F27"></div><div style="width:${(_actNone.length/_actCohort.length*100).toFixed(1)}%;background:#E24B4A"></div>`;}
+    const _actSnaps=snapshots.filter(s=>s.counts&&s.counts.act_rate!=null);
+    const trend=document.getElementById('act-trend');
+    if(trend&&_actSnaps.length>=2){trend.innerHTML=_actSnaps.slice(-6).map(s=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:0.5px solid #f2f1ed"><span style="color:#888">${s.date}</span><span style="font-weight:600;color:#2563EB">${s.counts.act_rate}%</span></div>`).join('');}
+  }
   const active=fData.filter(r=>r.dev>0&&r.cmd>0&&r.daysSince!==null);
   const s90=active.length?Math.round(active.filter(r=>r.daysSince>90).length/active.length*100):0;
   const s30=active.length?Math.round(active.filter(r=>r.daysSince<=30).length/active.length*100):0;
@@ -2232,84 +2278,6 @@ function buildTestTab(data, oemFilter){
     const _ss=document.getElementById('silence-strip');if(_ss)_ss.style.display='';
   }
 })();
-
-async function generateStandalone(){
-  try{
-    // Build lean data (same as saveSnaps)
-    const snap=snapshots[snapshots.length-1];
-    const allSnaps=snapshots;
-    const lean=allData.map(r=>({d:r.d,co:r.co,ct:r.ct,em:r.email,oem:r.oem,dev:r.dev,cmd:r.cmd,
-      cr:r.cr,ds:r.daysSince,dc:r.daysCreated,la:r.la,tr:r.tr,td:r.trDays,di:r.daysIntoTrial,lim:r.lim,lp:r.lowP,
-      f:r.f,tl:r.tl}));
-    const leanJSON=JSON.stringify(lean);
-    const snapJSON=JSON.stringify(snap||{});
-    const allSnapsJSON=JSON.stringify(allSnaps||[]);
-
-    // Fetch the viewer HTML from GitHub
-    const btn=document.getElementById('standalone-btn');
-    const origText=btn.textContent;
-    btn.textContent='Generating...';btn.disabled=true;
-
-    let viewerHtml;
-    try{
-      const resp=await fetch('https://ohad3472.github.io/cs-dashboard/cs_dashboard_viewer.html');
-      if(!resp.ok) throw new Error('fetch failed');
-      viewerHtml=await resp.text();
-    }catch(e){
-      // Fallback: use current page's viewer (same codebase minus admin parts)
-      btn.textContent='Could not fetch viewer. Use GitHub upload instead.';
-      btn.disabled=false;
-      return;
-    }
-
-    // Inject standalone data — replace loadSnaps with embedded version
-    const escapedLean=leanJSON.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$\{/g,'\\${');
-    const escapedSnap=snapJSON.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$\{/g,'\\${');
-    const escapedAllSnaps=allSnapsJSON.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$\{/g,'\\${');
-
-    // Replace the loadSnaps function body to use embedded data
-    const standaloneLoadSnaps=`async function loadSnaps(){
-  // STANDALONE MODE — embedded data, no Supabase
-  try{
-    const lean=JSON.parse(\`${escapedLean}\`);
-    const snap=JSON.parse(\`${escapedSnap}\`);
-    const allSnaps=JSON.parse(\`${escapedAllSnaps}\`);
-    allData=lean.map(r=>({d:r.d||'',co:r.co||'',ct:r.ct||'',email:r.em||'',oem:r.oem||'undefined',
-      dev:r.dev||0,cmd:r.cmd||0,cr:r.cr!=null?r.cr:null,daysSince:r.ds!=null?r.ds:null,
-      daysCreated:r.dc!=null?r.dc:null,la:r.la||'',tr:r.tr||false,trDays:r.td!=null?r.td:null,daysIntoTrial:r.di!=null?r.di:null,
-      lim:r.lim||false,lowP:r.lp||0,f:r.f||[],tl:r.tl||'amber',
-      cpd:r.dev>0?Math.round(r.cmd/r.dev*10)/10:0,created:r.la||''}));
-    if(allSnaps&&allSnaps.length)snapshots=allSnaps;else if(snap&&snap.date)snapshots=[snap];
-    console.log('Standalone mode:',allData.length,'accounts loaded');
-  }catch(e){console.error('Standalone load error:',e);}
-}`;
-
-    // Find and replace loadSnaps in viewer
-    const lsStart=viewerHtml.indexOf('async function loadSnaps(){');
-    const lsEnd=viewerHtml.indexOf('\nasync function saveSnaps()',lsStart);
-    let standalone;
-    if(lsStart>0&&lsEnd>0){
-      standalone=viewerHtml.slice(0,lsStart)+standaloneLoadSnaps+viewerHtml.slice(lsEnd);
-    } else {
-      standalone=viewerHtml; // fallback — inject at end
-    }
-
-    // Download
-    const blob=new Blob([standalone],{type:'text/html'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    const date=(snap&&snap.date)||new Date().toISOString().slice(0,10);
-    a.href=url;
-    a.download=`cs_dashboard_standalone_${date}.html`;
-    a.click();
-    URL.revokeObjectURL(url);
-    btn.textContent=origText;btn.disabled=false;
-  }catch(e){
-    console.error('generateStandalone error:',e);
-    alert('Error generating standalone file: '+e.message);
-  }
-}
-
 </script>
 </body>
 </html>
