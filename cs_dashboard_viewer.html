@@ -270,7 +270,7 @@ select.filter-sel{font-size:12px;padding:4px 10px;border:1px solid #ddd;border-r
 <body>
 
 <div class="page">
-<h1 class="page-title">Customer Success — Account Dashboard <span style="font-size:12px;font-weight:400;color:#aaa;margin-left:6px">(v8.4)</span></h1>
+<h1 class="page-title">Customer Success — Account Dashboard <span style="font-size:12px;font-weight:400;color:#aaa;margin-left:6px">(v8.7)</span></h1>
 <p class="page-sub" id="page-sub">Drop your weekly xlsx to load</p>
 
 <div id="date-modal">
@@ -1906,7 +1906,7 @@ function filterDashAlerts(){
     if(bar){bar.innerHTML=`<div style="width:${(_actYes.length/_actCohort.length*100).toFixed(1)}%;background:#1D9E75"></div><div style="width:${(_actLow.length/_actCohort.length*100).toFixed(1)}%;background:#EF9F27"></div><div style="width:${(_actNone.length/_actCohort.length*100).toFixed(1)}%;background:#E24B4A"></div>`;}
     const _actSnaps=snapshots.filter(s=>s.counts&&s.counts.act_rate!=null);
     const trend=document.getElementById('act-trend');
-    if(trend&&_actSnaps.length>=2){trend.innerHTML=_actSnaps.slice(-6).map(s=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:0.5px solid #f2f1ed"><span style="color:#888">${s.date}</span><span style="font-weight:600;color:#2563EB">${s.counts.act_rate}%</span></div>`).join('');}
+    if(trend&&_actSnaps.length>=2){trend.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:4px 8px;align-items:flex-end">'+_actSnaps.slice(-8).map((s,i,arr)=>{const isLast=i===arr.length-1;return'<div style="text-align:center"><div style="font-weight:700;font-size:'+(isLast?'14px':'11px')+';color:'+(isLast?'#185FA5':'#999')+'">'+s.counts.act_rate+'%</div><div style="font-size:9px;color:#ccc;margin-top:1px">'+s.date.slice(5)+'</div></div>'+(i<arr.length-1?'<span style="color:#ddd;font-size:9px;align-self:center">›</span>':'')}).join('')+'</div>';}
   }
   if(!window._hasCPData){const ncEl=document.getElementById('n-nocp');if(ncEl)ncEl.textContent='N/A';const ncCard=document.getElementById('card-nocp');if(ncCard)ncCard.style.opacity='0.45';}
   const active=fData.filter(r=>r.dev>0&&r.cmd>0&&r.daysSince!==null);
