@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Customer Success — Account Dashboard v8.1</title>
+<title>Customer Success — Account Dashboard v8.2</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
@@ -300,9 +300,9 @@ if(sessionStorage.getItem('cs_auth')==='1'){
 </script>
 
 <div class="page">
-<h1 class="page-title">Customer Success — Account Dashboard <span style="font-size:12px;font-weight:400;color:#aaa;margin-left:6px">(v8.1)</span></h1>
+<h1 class="page-title">Customer Success — Account Dashboard <span style="font-size:12px;font-weight:400;color:#aaa;margin-left:6px">(v8.2)</span></h1>
 <p class="page-sub" id="page-sub">Drop your weekly xlsx to load</p>
-    <span style="font-size:10px;color:#bbb;float:right;margin-top:-20px">v8.1</span>
+    <span style="font-size:10px;color:#bbb;float:right;margin-top:-20px">v8.2</span>
 
 <div id="date-modal">
   <div class="modal-box">
@@ -468,12 +468,12 @@ if(sessionStorage.getItem('cs_auth')==='1'){
         <div class="row-pill" style="background:#185FA5">Activation<br>rate</div>
         <div class="cards-row">
           <div class="acard c-b" style="cursor:default">
-            <div class="card-num" id="n-act-rate" style="color:#185FA5">—</div>
-            <div class="card-label">Activation rate</div>
-            <div class="card-sub"><span id="n-act-yes-raw" style="font-weight:600;color:#1D9E75">—</span> of <span id="n-act-total-raw">—</span> accounts</div>
+            <div class="card-num" id="n-act-yes-raw" style="color:#1D9E75">—</div>
+            <div class="card-label">Activation rate — <span id="n-act-rate" style="font-weight:600;color:#185FA5">—</span></div>
+            <div class="card-sub">of <span id="n-act-total-raw">—</span> accounts activated</div>
             <div class="card-sub">Non-trial · created 60–365 days ago</div>
           </div>
-          <div class="acard" style="cursor:default;grid-column:span 2">
+          <div class="acard" style="cursor:default;flex:2">
             <div class="card-label" style="margin-bottom:6px">Breakdown — <span id="n-act-total">—</span> accounts in cohort</div>
             <div id="act-breakdown-bar" style="height:10px;border-radius:5px;overflow:hidden;display:flex;margin-bottom:8px"></div>
             <div style="display:flex;gap:12px;font-size:11px;flex-wrap:wrap">
