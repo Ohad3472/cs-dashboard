@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Customer Success — Account Dashboard v8.7</title>
+<title>Customer Success — Account Dashboard v8.8</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
@@ -300,9 +300,9 @@ if(sessionStorage.getItem('cs_auth')==='1'){
 </script>
 
 <div class="page">
-<h1 class="page-title">Customer Success — Account Dashboard <span style="font-size:12px;font-weight:400;color:#aaa;margin-left:6px">(v8.7)</span></h1>
+<h1 class="page-title">Customer Success — Account Dashboard <span style="font-size:12px;font-weight:400;color:#aaa;margin-left:6px">(v8.8)</span></h1>
 <p class="page-sub" id="page-sub">Drop your weekly xlsx to load</p>
-    <span style="font-size:10px;color:#bbb;float:right;margin-top:-20px">v8.7</span>
+    <span style="font-size:10px;color:#bbb;float:right;margin-top:-20px">v8.8</span>
 
 <div id="date-modal">
   <div class="modal-box">
@@ -332,7 +332,7 @@ if(sessionStorage.getItem('cs_auth')==='1'){
     <div style="font-size:22px;margin-bottom:.3rem;color:#bbb">📂</div>
     <div style="font-size:13px;font-weight:500;color:#555;margin-bottom:.15rem">Drop your Excel file here, or click to browse</div>
     <div style="font-size:11px;color:#aaa">shob_report_YYYYMMDD.xlsx</div>
-    <input type="file" id="file-input" accept=".xlsx,.xls,.csv" onchange="handleFile(this.files[0])">
+    <input type="file" id="file-input" accept=".xlsx,.xls,.csv" multiple onchange="handleFiles(this.files)">
   </div>
   <div id="snapshots-bar"></div>
 
@@ -919,7 +919,7 @@ let _dragDepth=0;
 function _onDragEnter(e){e.preventDefault();_dragDepth++;e.currentTarget.classList.add('drag-over');}
 function _onDragLeave(e){e.preventDefault();if(--_dragDepth<=0){_dragDepth=0;e.currentTarget.classList.remove('drag-over');}}
 function _onDragOver(e){e.preventDefault();}
-function _onDrop(e){e.preventDefault();_dragDepth=0;e.currentTarget.classList.remove('drag-over');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);}
+function _onDrop(e){e.preventDefault();_dragDepth=0;e.currentTarget.classList.remove('drag-over');if(e.dataTransfer.files.length)handleFiles(e.dataTransfer.files);}
 function attachDrag(el){
   el.removeEventListener('dragenter',_onDragEnter);
   el.removeEventListener('dragleave',_onDragLeave);
@@ -931,28 +931,85 @@ function attachDrag(el){
   el.addEventListener('drop',_onDrop);
 }
 attachDrag(dz);
-function handleFile(f){
-  pendingFile=f;pendingFilename=f.name;
-  const m=f.name.match(/(\d{4})[-_. ]?(\d{2})[-_. ]?(\d{2})/);
-  document.getElementById('modal-filename').textContent='📄 '+f.name;
-  document.getElementById('modal-date').value=m?`${m[1]}-${m[2]}-${m[3]}`:'';
-  document.getElementById('date-modal').classList.add('visible');
+// ── Batch upload state ──
+let _batchQueue=[],_batchIdx=0,_batchTotal=0;
+
+function handleFiles(fileList){
+  const files=Array.from(fileList);
+  if(!files.length)return;
+  if(files.length===1){handleFile(files[0]);return;}
+  // Multi-file: sort by detected date, then process sequentially
+  const dated=files.map(f=>{
+    const m=f.name.match(/(\d{4})[-_. ]?(\d{2})[-_. ]?(\d{2})/);
+    return{f,date:m?`${m[1]}-${m[2]}-${m[3]}`:null};
+  });
+  // Files with no detectable date go to end
+  dated.sort((a,b)=>{
+    if(!a.date&&!b.date)return 0;
+    if(!a.date)return 1;
+    if(!b.date)return -1;
+    return a.date.localeCompare(b.date);
+  });
+  _batchQueue=dated;_batchIdx=0;_batchTotal=dated.length;
+  _processBatchNext();
 }
-function cancelUpload(){pendingFile=null;document.getElementById('date-modal').classList.remove('visible');}
-function confirmUpload(){
-  const dv=document.getElementById('modal-date').value;
-  if(!dv){alert('Please select a date.');return;}
-  document.getElementById('date-modal').classList.remove('visible');
+function handleFile(f){handleFiles([f]);}
+
+function _processBatchNext(){
+  if(_batchIdx>=_batchQueue.length){
+    // All done — update UI to show last file
+    const last=_batchQueue[_batchQueue.length-1];
+    const dz=document.getElementById('drop-zone');
+    if(dz){
+      dz.classList.add('loaded');
+      dz.innerHTML=`<div style="display:flex;align-items:center;gap:12px;padding:.5rem .75rem;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:#0F6E56;font-weight:500">✓ ${_batchTotal} files uploaded</span>
+        <button id="load-btn" style="font-size:11px;font-weight:600;padding:5px 14px;border-radius:6px;border:1.5px solid #0F6E56;background:#fff;color:#0F6E56;cursor:pointer;white-space:nowrap">⬆ Load new file</button>
+        <span style="font-size:10px;color:#aaa">or drag &amp; drop</span>
+      </div><input type="file" id="file-input" accept=".xlsx,.xls,.csv" multiple onchange="handleFiles(this.files)" style="display:none">`;
+      document.getElementById('load-btn').addEventListener('click',e=>{e.stopPropagation();document.getElementById('file-input').click();});
+      _dragDepth=0;attachDrag(dz);
+    }
+    const _standaloneBtn=document.getElementById('standalone-btn');if(_standaloneBtn)_standaloneBtn.style.display='';
+    return;
+  }
+  const {f,date}=_batchQueue[_batchIdx];
+  // Show progress in drop zone
+  const dz=document.getElementById('drop-zone');
+  if(dz) dz.innerHTML=`<div style="padding:.5rem .75rem;font-size:12px;color:#0F6E56">Processing file ${_batchIdx+1} of ${_batchTotal}: ${f.name}…</div>`;
+  if(date){
+    // Date detected from filename — process silently, no modal
+    _readAndProcess(f,date);
+  } else {
+    // Can't detect date — show modal for this one file
+    pendingFile=f;pendingFilename=f.name;
+    document.getElementById('modal-filename').textContent='📄 '+f.name+' ('+ (_batchIdx+1)+' of '+_batchTotal+')';
+    document.getElementById('modal-date').value='';
+    document.getElementById('date-modal').classList.add('visible');
+  }
+}
+function _readAndProcess(f,dateStr){
   const reader=new FileReader();
   reader.onload=e=>{
     try{
       const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
       let sn=wb.SheetNames[0];
       for(const s of wb.SheetNames){try{const r=XLSX.utils.decode_range(wb.Sheets[s]['!ref']||'A1');if(r.e.r>100){sn=s;break;}}catch(e){}}
-      processData(XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:null,raw:false}),pendingFilename,dv);
-    }catch(err){alert('Error: '+err.message);}
+      processData(XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:null,raw:false}),f.name,dateStr);
+      _batchIdx++;
+      _processBatchNext();
+    }catch(err){alert('Error reading '+f.name+': '+err.message);}
   };
-  reader.readAsArrayBuffer(pendingFile);
+  reader.readAsArrayBuffer(f);
+}
+function cancelUpload(){pendingFile=null;document.getElementById('date-modal').classList.remove('visible');_batchQueue=[];_batchIdx=0;}
+function confirmUpload(){
+  const dv=document.getElementById('modal-date').value;
+  if(!dv){alert('Please select a date.');return;}
+  document.getElementById('date-modal').classList.remove('visible');
+  const f=pendingFile;
+  _readAndProcess(f,dv);
+  _batchIdx++;
 }
 
 /* ═══ HELPERS ═══ */
@@ -1140,14 +1197,17 @@ function processData(raw,filename,dateStr){
   saveSnaps().catch(e=>console.error('Save failed:',e));
   const _standaloneBtn=document.getElementById('standalone-btn');if(_standaloneBtn)_standaloneBtn.style.display='';
 
-  dz.classList.add('loaded');
-  dz.innerHTML=`<div style="display:flex;align-items:center;gap:12px;padding:.5rem .75rem;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;flex-wrap:wrap">
-    <span style="font-size:12px;color:#0F6E56;font-weight:500">✓ ${filename} (${dateStr}) — ${allData.length.toLocaleString()} accounts</span>
-    <button id="load-btn" style="font-size:11px;font-weight:600;padding:5px 14px;border-radius:6px;border:1.5px solid #0F6E56;background:#fff;color:#0F6E56;cursor:pointer;white-space:nowrap">⬆ Load new file</button>
-    <span style="font-size:10px;color:#aaa">or drag &amp; drop</span>
-  </div><input type="file" id="file-input" accept=".xlsx,.xls,.csv" onchange="handleFile(this.files[0])" style="display:none">`;
-  document.getElementById('load-btn').addEventListener('click',e=>{e.stopPropagation();document.getElementById('file-input').click();});
-  _dragDepth=0;attachDrag(dz);
+  // In batch mode, drop-zone UI is handled by _processBatchNext; only update here for single-file uploads
+  if(_batchTotal<=1){
+    dz.classList.add('loaded');
+    dz.innerHTML=`<div style="display:flex;align-items:center;gap:12px;padding:.5rem .75rem;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;flex-wrap:wrap">
+      <span style="font-size:12px;color:#0F6E56;font-weight:500">✓ ${filename} (${dateStr}) — ${allData.length.toLocaleString()} accounts</span>
+      <button id="load-btn" style="font-size:11px;font-weight:600;padding:5px 14px;border-radius:6px;border:1.5px solid #0F6E56;background:#fff;color:#0F6E56;cursor:pointer;white-space:nowrap">⬆ Load new file</button>
+      <span style="font-size:10px;color:#aaa">or drag &amp; drop</span>
+    </div><input type="file" id="file-input" accept=".xlsx,.xls,.csv" multiple onchange="handleFiles(this.files)" style="display:none">`;
+    document.getElementById('load-btn').addEventListener('click',e=>{e.stopPropagation();document.getElementById('file-input').click();});
+    _dragDepth=0;attachDrag(dz);
+  }
   document.getElementById('page-sub').textContent=`${allData.length.toLocaleString()} accounts · ${filename} · ${dateStr}`;
   document.getElementById('main-dashboard').style.display='block';
   document.getElementById('trial-empty').style.display='none';
@@ -2277,7 +2337,7 @@ function buildTestTab(data, oemFilter){
         <span style="font-size:12px;color:#0F6E56;font-weight:500">✓ ${snap.filename} (${snap.date}) — ${allData.length.toLocaleString()} accounts</span>
         <button id="load-btn" style="font-size:11px;font-weight:600;padding:5px 14px;border-radius:6px;border:1.5px solid #0F6E56;background:#fff;color:#0F6E56;cursor:pointer;white-space:nowrap">⬆ Load new file</button>
         <span style="font-size:10px;color:#aaa">or drag &amp; drop</span>
-      </div><input type="file" id="file-input" accept=".xlsx,.xls,.csv" onchange="handleFile(this.files[0])" style="display:none">`;
+      </div><input type="file" id="file-input" accept=".xlsx,.xls,.csv" multiple onchange="handleFiles(this.files)" style="display:none">`;
       document.getElementById('load-btn').addEventListener('click',e=>{e.stopPropagation();document.getElementById('file-input').click();});
       _dragDepth=0;attachDrag(dz);
     }
