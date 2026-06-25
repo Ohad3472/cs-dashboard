@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Customer Success — Account Dashboard v8.4</title>
+<title>Customer Success — Account Dashboard v8.5</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
@@ -300,9 +300,9 @@ if(sessionStorage.getItem('cs_auth')==='1'){
 </script>
 
 <div class="page">
-<h1 class="page-title">Customer Success — Account Dashboard <span style="font-size:12px;font-weight:400;color:#aaa;margin-left:6px">(v8.4)</span></h1>
+<h1 class="page-title">Customer Success — Account Dashboard <span style="font-size:12px;font-weight:400;color:#aaa;margin-left:6px">(v8.5)</span></h1>
 <p class="page-sub" id="page-sub">Drop your weekly xlsx to load</p>
-    <span style="font-size:10px;color:#bbb;float:right;margin-top:-20px">v8.4</span>
+    <span style="font-size:10px;color:#bbb;float:right;margin-top:-20px">v8.5</span>
 
 <div id="date-modal">
   <div class="modal-box">
@@ -1319,7 +1319,7 @@ function renderSnapsBar(){
   if(!snapshots.length){bar.innerHTML='';return;}
   bar.innerHTML='<span class="snap-label">Snapshots:</span>'+snapshots.map((s,i)=>`<span class="snap-chip ${i===snapshots.length-1?'current':''}">📅 ${s.date}<span class="snap-x" onclick="deleteSnap(${i})">×</span></span>`).join('');
 }
-function deleteSnap(i){const date=snapshots[i]?.date;snapshots.splice(i,1);if(date)deleteSnapRemote(date);renderSnapsBar();renderTrends();const b=document.getElementById('snap-badge');if(snapshots.length){b.textContent=snapshots.length;b.style.display='';}else b.style.display='none';}
+function deleteSnap(i){const date=snapshots[i]?.date;const wasLatest=(i===snapshots.length-1);snapshots.splice(i,1);if(date){deleteSnapRemote(date);if(wasLatest&&snapshots.length>0)saveSnaps().catch(e=>console.error('Re-save after delete failed:',e));}renderSnapsBar();renderTrends();const b=document.getElementById('snap-badge');if(snapshots.length){b.textContent=snapshots.length;b.style.display='';}else b.style.display='none';}
 
 /* ═══ TRENDS ═══ */
 function populateTrendFilters(){
