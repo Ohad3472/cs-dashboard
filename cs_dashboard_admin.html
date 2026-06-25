@@ -300,7 +300,7 @@ if(sessionStorage.getItem('cs_auth')==='1'){
 </script>
 
 <div class="page">
-<h1 class="page-title">Customer Success — Account Dashboard</h1>
+<h1 class="page-title">Customer Success — Account Dashboard <span style="font-size:12px;font-weight:400;color:#aaa;margin-left:6px">(v8.1)</span></h1>
 <p class="page-sub" id="page-sub">Drop your weekly xlsx to load</p>
     <span style="font-size:10px;color:#bbb;float:right;margin-top:-20px">v8.1</span>
 
@@ -470,28 +470,16 @@ if(sessionStorage.getItem('cs_auth')==='1'){
           <div class="acard c-b" style="cursor:default">
             <div class="card-num" id="n-act-rate" style="color:#185FA5">—</div>
             <div class="card-label">Activation rate</div>
-            <div class="card-sub" style="margin-top:4px"><span id="n-act-yes-raw" style="font-weight:600;color:#1D9E75">—</span> of <span id="n-act-total-raw" style="font-weight:600">—</span> accounts</div>
+            <div class="card-sub"><span id="n-act-yes-raw" style="font-weight:600;color:#1D9E75">—</span> of <span id="n-act-total-raw">—</span> accounts</div>
             <div class="card-sub">Non-trial · created 60–365 days ago</div>
           </div>
           <div class="acard" style="cursor:default;grid-column:span 2">
-            <div class="card-label" style="margin-bottom:8px">Cohort breakdown — <span id="n-act-total">—</span> accounts</div>
-            <div id="act-breakdown-bar" style="height:14px;border-radius:5px;overflow:hidden;display:flex;margin-bottom:10px"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:11px">
-              <div style="background:#1D9E7512;border-radius:5px;padding:6px 8px;border-left:3px solid #1D9E75">
-                <div style="color:#085041;font-weight:600;font-size:13px" id="n-act-yes">—</div>
-                <div style="color:#555;margin-top:1px">✓ Activated</div>
-                <div style="color:#888;font-size:10px">dev≥1 · cmd/dev≥2</div>
-              </div>
-              <div style="background:#EF9F2712;border-radius:5px;padding:6px 8px;border-left:3px solid #EF9F27">
-                <div style="color:#633806;font-weight:600;font-size:13px" id="n-act-low">—</div>
-                <div style="color:#555;margin-top:1px">Low usage</div>
-                <div style="color:#888;font-size:10px">has device · low commands</div>
-              </div>
-              <div style="background:#E24B4A12;border-radius:5px;padding:6px 8px;border-left:3px solid #E24B4A">
-                <div style="color:#791F1F;font-weight:600;font-size:13px" id="n-act-none">—</div>
-                <div style="color:#555;margin-top:1px">No device</div>
-                <div style="color:#888;font-size:10px">0 devices enrolled</div>
-              </div>
+            <div class="card-label" style="margin-bottom:6px">Breakdown — <span id="n-act-total">—</span> accounts in cohort</div>
+            <div id="act-breakdown-bar" style="height:10px;border-radius:5px;overflow:hidden;display:flex;margin-bottom:8px"></div>
+            <div style="display:flex;gap:12px;font-size:11px;flex-wrap:wrap">
+              <span style="display:flex;align-items:center;gap:4px"><span style="width:9px;height:9px;border-radius:2px;background:#1D9E75;display:inline-block"></span>Activated: <strong id="n-act-yes">—</strong></span>
+              <span style="display:flex;align-items:center;gap:4px"><span style="width:9px;height:9px;border-radius:2px;background:#EF9F27;display:inline-block"></span>Low usage: <strong id="n-act-low">—</strong></span>
+              <span style="display:flex;align-items:center;gap:4px"><span style="width:9px;height:9px;border-radius:2px;background:#E24B4A;display:inline-block"></span>No device: <strong id="n-act-none">—</strong></span>
             </div>
           </div>
           <div class="acard" style="cursor:default">
