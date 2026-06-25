@@ -1012,6 +1012,7 @@ function processData(raw,filename,dateStr){
 
     const cpd         =dev>0?cmd/dev:0;
     const daysSince   =la?Math.floor((TODAY-la)/86400000):null;
+    const daysCreated =created?Math.floor((TODAY-created)/86400000):null;
     const daysSinceTE =te?Math.floor((TODAY-te)/86400000):null;
     const daysIntoTrial=ts?Math.floor((TODAY-ts)/86400000):null;
     const daysToSmartExp=smartExp?Math.floor((smartExp-TODAY)/86400000):null;
@@ -1061,7 +1062,7 @@ function processData(raw,filename,dateStr){
       trDays,la:la?la.toISOString().slice(0,10):'',
       created:created?created.toISOString().slice(0,10):'',
       daysLeft:daysLeft?Math.round(daysLeft):null,
-      daysSince,daysIntoTrial,daysToSmartExp,
+      daysSince,daysCreated,daysIntoTrial,daysToSmartExp,
       allLP,someLP,lowP,tl,tl_order:TL_ORDER[tl]??3,f:flags,
       and:Math.round(andD),win:Math.round(winD)
     });
